@@ -9,8 +9,9 @@ Scriptul `optimizare-pc.ps1` face o optimizare sigura (fara „tweak-uri” risc
 5. Optimizeaza discurile (TRIM pe SSD, defrag pe HDD)
 6. Goleste cache-ul DNS
 7. Opreste reclamele/sugestiile din Windows
-8. (optional `-Complet`) Repara fisierele de sistem cu DISM + SFC
-9. Afiseaza programele de la pornire si starea discurilor/RAM-ului
+8. Jocuri: Game Mode, opreste Xbox Game DVR, GPU scheduling, fara accelerare mouse, placa video dedicata pentru Fortnite si LoL
+9. (optional `-Complet`) Repara fisierele de sistem cu DISM + SFC
+10. Afiseaza programele de la pornire, starea discurilor/RAM-ului si ce procese consuma cel mai mult RAM
 
 ## Cum il rulezi
 

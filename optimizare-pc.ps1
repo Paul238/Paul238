@@ -66,6 +66,43 @@ foreach ($v in "SubscribedContent-338388Enabled","SubscribedContent-338389Enable
     Set-ItemProperty -Path $cdm -Name $v -Value 0 -Type DWord -ErrorAction SilentlyContinue
 }
 
+# 7b. Setari pentru jocuri (Fortnite, League of Legends)
+Pas "Aplic setarile pentru jocuri"
+# Game Mode pornit
+New-Item -Path "HKCU:\Software\Microsoft\GameBar" -Force | Out-Null
+Set-ItemProperty "HKCU:\Software\Microsoft\GameBar" -Name AutoGameModeEnabled -Value 1 -Type DWord
+# Oprire inregistrare automata Xbox Game DVR in fundal (consuma FPS)
+New-Item -Path "HKCU:\System\GameConfigStore" -Force | Out-Null
+Set-ItemProperty "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -Value 0 -Type DWord
+New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Force | Out-Null
+Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name AppCaptureEnabled -Value 0 -Type DWord
+# Hardware-accelerated GPU scheduling (activ dupa restart)
+Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name HwSchMode -Value 2 -Type DWord -ErrorAction SilentlyContinue
+# Fara accelerare mouse ("Enhance pointer precision" oprit) - tintire mai precisa
+Set-ItemProperty "HKCU:\Control Panel\Mouse" -Name MouseSpeed -Value "0"
+Set-ItemProperty "HKCU:\Control Panel\Mouse" -Name MouseThreshold1 -Value "0"
+Set-ItemProperty "HKCU:\Control Panel\Mouse" -Name MouseThreshold2 -Value "0"
+
+# Forteaza placa video dedicata pentru jocuri (laptop cu 2 placi video)
+$jocuri = @(
+    "Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe",
+    "Riot Games\League of Legends\Game\League of Legends.exe",
+    "Riot Games\League of Legends\LeagueClient.exe"
+)
+$radacini = @("$env:ProgramFiles", "${env:ProgramFiles(x86)}") +
+            (Get-Volume | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' } | ForEach-Object { "$($_.DriveLetter):\"; "$($_.DriveLetter):\Program Files" })
+$gpuKey = "HKCU:\Software\Microsoft\DirectX\UserGpuPreferences"
+New-Item -Path $gpuKey -Force | Out-Null
+foreach ($j in $jocuri) {
+    foreach ($r in $radacini | Select-Object -Unique) {
+        $cale = Join-Path $r $j
+        if (Test-Path $cale) {
+            Set-ItemProperty -Path $gpuKey -Name $cale -Value "GpuPreference=2;"
+            Write-Host "Placa video dedicata setata pentru: $cale"
+        }
+    }
+}
+
 # 8. Verificare fisiere sistem (optional)
 if ($Complet) {
     Pas "Repar imaginea Windows (DISM RestoreHealth)"
@@ -83,6 +120,11 @@ Pas "Stare sistem"
 $os = Get-CimInstance Win32_OperatingSystem
 "{0} | RAM total: {1} GB | RAM liber: {2} GB" -f $os.Caption, [math]::Round($os.TotalVisibleMemorySize/1MB,1), [math]::Round($os.FreePhysicalMemory/1MB,1)
 Get-PhysicalDisk | Select-Object FriendlyName, MediaType, HealthStatus, @{n='GB';e={[math]::Round($_.Size/1GB)}} | Format-Table -AutoSize
+$commitTotal = [math]::Round($os.TotalVirtualMemorySize/1MB,1)
+$commitLiber = [math]::Round($os.FreeVirtualMemory/1MB,1)
+Write-Host "Memorie folosita (RAM + page file): $([math]::Round($commitTotal-$commitLiber,1)) / $commitTotal GB"
+Write-Host "Top 10 procese dupa consumul de RAM:"
+Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 10 Name, @{n='RAM (MB)';e={[math]::Round($_.WorkingSet64/1MB)}} | Format-Table -AutoSize
 
 $dupa = SpatiuLiber
 Write-Host "`nGata! Spatiu liber pe C: $inainte GB -> $dupa GB (eliberat: $([math]::Round($dupa-$inainte,2)) GB)" -ForegroundColor Green
