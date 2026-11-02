@@ -124,7 +124,12 @@ $commitTotal = [math]::Round($os.TotalVirtualMemorySize/1MB,1)
 $commitLiber = [math]::Round($os.FreeVirtualMemory/1MB,1)
 Write-Host "Memorie folosita (RAM + page file): $([math]::Round($commitTotal-$commitLiber,1)) / $commitTotal GB"
 Write-Host "Top 10 procese dupa consumul de RAM:"
-Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 10 Name, @{n='RAM (MB)';e={[math]::Round($_.WorkingSet64/1MB)}} | Format-Table -AutoSize
+Get-Process | Sort-Object PrivateMemorySize64 -Descending | Select-Object -First 10 Name, @{n='RAM (MB)';e={[math]::Round($_.WorkingSet64/1MB)}}, @{n='Alocat (MB)';e={[math]::Round($_.PrivateMemorySize64/1MB)}} | Format-Table -AutoSize
+$mem = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory
+$suma = [math]::Round(((Get-Process | Measure-Object PrivateMemorySize64 -Sum).Sum)/1GB,1)
+Write-Host "Total alocat de toate procesele: $suma GB"
+Write-Host ("Memorie kernel/drivere: Paged pool {0} MB | Non-paged pool {1} MB" -f [math]::Round($mem.PoolPagedBytes/1MB), [math]::Round($mem.PoolNonpagedBytes/1MB))
+Write-Host "(Non-paged pool peste ~1500 MB = probabil un driver cu scurgere de memorie)" -ForegroundColor DarkYellow
 
 $dupa = SpatiuLiber
 Write-Host "`nGata! Spatiu liber pe C: $inainte GB -> $dupa GB (eliberat: $([math]::Round($dupa-$inainte,2)) GB)" -ForegroundColor Green
