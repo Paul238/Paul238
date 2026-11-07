@@ -8,15 +8,35 @@ function Write-Ok($text)   { Write-Host "    $text" -ForegroundColor Green }
 function Write-Warn2($text) { Write-Host "    $text" -ForegroundColor Yellow }
 
 function Assert-Docker {
+    # Docker poate fi instalat, dar fereastra curenta sa nu-l aiba inca in PATH
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        throw "Docker nu este instalat. Instaleaza Docker Desktop: https://www.docker.com/products/docker-desktop/"
+        $bin = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin'
+        if (Test-Path (Join-Path $bin 'docker.exe')) {
+            $env:Path = "$bin;$env:Path"
+        } else {
+            throw "Docker Desktop nu este instalat. Ruleaza ca Administrator: winget install -e --id Docker.DockerDesktop  (apoi reporneste laptopul)"
+        }
     }
+
     # in PowerShell 5.1 stderr-ul unei comenzi externe + 'Stop' ar opri scriptul
     $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     docker info > $null 2>&1
-    $code = $LASTEXITCODE; $ErrorActionPreference = $prev
+    $code = $LASTEXITCODE
     if ($code -ne 0) {
-        throw "Docker Desktop nu ruleaza. Porneste Docker Desktop, asteapta sa scrie 'Engine running', apoi ruleaza din nou."
+        $desktop = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
+        if (Test-Path $desktop) {
+            Write-Host "    Pornesc Docker Desktop si astept motorul (pana la 3 minute)..." -ForegroundColor Yellow
+            Start-Process $desktop
+            for ($i = 0; $i -lt 90 -and $code -ne 0; $i++) {
+                Start-Sleep -Seconds 2
+                docker info > $null 2>&1
+                $code = $LASTEXITCODE
+            }
+        }
+    }
+    $ErrorActionPreference = $prev
+    if ($code -ne 0) {
+        throw "Docker Desktop nu porneste. Deschide-l manual, asteapta 'Engine running' si citeste eventualul mesaj de eroare."
     }
 }
 
