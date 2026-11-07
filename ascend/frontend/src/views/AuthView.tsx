@@ -1,9 +1,11 @@
 import { Gift, LineChart, Mountain, Wallet } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { AuthError, localAuth, type Session } from '../services/auth';
+import { AuthError, type Session } from '../services/auth';
+import type { Backend } from '../services/backend';
 
-export function AuthView({ onAuth }: { onAuth: (s: Session) => void }) {
+export function AuthView({ backend, onAuth }: { backend: Backend; onAuth: (s: Session) => Promise<void> | void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const auth = backend.auth;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -15,10 +17,10 @@ export function AuthView({ onAuth }: { onAuth: (s: Session) => void }) {
     setError('');
     setBusy(true);
     try {
-      const s = mode === 'login' ? await localAuth.login(email, password) : await localAuth.register(email, password, name);
-      onAuth(s);
+      const s = mode === 'login' ? await auth.login(email, password) : await auth.register(email, password, name);
+      await onAuth(s);
     } catch (err) {
-      setError(err instanceof AuthError ? err.message : 'A apărut o eroare. Încearcă din nou.');
+      setError(err instanceof AuthError || err instanceof Error ? err.message : 'A apărut o eroare. Încearcă din nou.');
     } finally {
       setBusy(false);
     }
@@ -60,7 +62,7 @@ export function AuthView({ onAuth }: { onAuth: (s: Session) => void }) {
             <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>
               Autentificare
             </button>
-            <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>
+            <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')} disabled={!backend.registration} title={backend.registration ? undefined : 'Înregistrarea este dezactivată pe acest server'}>
               Cont nou
             </button>
           </div>
@@ -93,7 +95,9 @@ export function AuthView({ onAuth }: { onAuth: (s: Session) => void }) {
             {busy ? 'Se procesează…' : mode === 'login' ? 'Intră în cont' : 'Creează contul'}
           </button>
           <p className="hint" style={{ textAlign: 'center' }}>
-            Versiunea curentă păstrează contul și datele local, pe acest dispozitiv.
+            {backend.kind === 'server'
+              ? 'Datele sunt salvate pe serverul tău și sincronizate pe toate dispozitivele.'
+              : 'Mod local: contul și datele rămân doar în acest browser.'}
           </p>
         </form>
       </div>

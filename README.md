@@ -1,6 +1,6 @@
 # Paul238
 
-- [`ascend/`](ascend/) — **Ascend**: aplicație web de dezvoltare personală gamificată (sarcini, atribute, credite, obiective). Vezi [ascend/README.md](ascend/README.md).
+- [`ascend/`](ascend/) — **Ascend**: aplicație de dezvoltare personală gamificată (sarcini, atribute, credite, obiective), cu server Docker (Apache + PHP + MariaDB). Instalarea pe Windows este descrisă în [ascend/README.md](ascend/README.md).
 - `optimizare-pc.ps1` — script de optimizare Windows (detalii mai jos).
 
 ---

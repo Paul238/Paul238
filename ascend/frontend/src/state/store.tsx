@@ -15,7 +15,8 @@ import { uid } from '../domain/id';
 import { characterTitle } from '../domain/leveling';
 import type { AppState, AttributeKey, Character, Goal, Settings, Task } from '../domain/types';
 import type { Session } from '../services/auth';
-import { localRepository } from '../services/storage';
+import type { Backend } from '../services/backend';
+import type { Loaded } from '../services/storage';
 
 export type ToastKind = 'success' | 'info' | 'level' | 'achievement' | 'bonus' | 'error';
 export interface Toast {
@@ -89,12 +90,29 @@ interface AppContextValue {
   celebration: Celebration | null;
   closeCelebration: () => void;
   logout: () => void;
+  backend: Backend;
+  sync: SyncStatus;
 }
+
+/** local = doar în browser; saved/saving/offline = sincronizare cu serverul */
+export type SyncStatus = 'local' | 'saved' | 'saving' | 'offline';
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-export function AppProvider({ session, onLogout, children }: { session: Session; onLogout: () => void; children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, session.userId, (id) => localRepository.load(id));
+export function AppProvider({
+  session,
+  backend,
+  initial,
+  onLogout,
+  children,
+}: {
+  session: Session;
+  backend: Backend;
+  initial: Loaded;
+  onLogout: () => void;
+  children: ReactNode;
+}) {
+  const [state, dispatch] = useReducer(reducer, initial.state);
   const now = useNow(15_000);
   const today = keyOf(now);
   const api = useMemo(() => createApi(dispatch), []);
@@ -108,10 +126,88 @@ export function AppProvider({ session, onLogout, children }: { session: Session;
   }, []);
   const dismissToast = useCallback((id: string) => setToasts((ts) => ts.filter((x) => x.id !== id)), []);
 
-  // persistență
+  /* ---------- persistență și sincronizare ---------- */
+  const [sync, setSync] = useState<SyncStatus>(backend.kind === 'local' ? 'local' : 'saved');
+  const revision = useRef(initial.revision);
+  const latest = useRef(state);
+  latest.current = state;
+  const skipSave = useRef(true); // starea inițială vine din stocare, nu o salvăm înapoi
+  const dirty = useRef(false);
+  const inFlight = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const prevEvents = useRef<{ level: number; attrs: Record<AttributeKey, number>; bonusId?: string } | null>(null);
+
+  /** înlocuiește starea cu versiunea de pe server, fără s-o retrimită */
+  const adoptRemote = useCallback((remote: Loaded) => {
+    revision.current = remote.revision;
+    skipSave.current = true;
+    prevEvents.current = null; // fără notificări pentru progresul făcut pe alt dispozitiv
+    dispatch({ type: 'state/replace', state: remote.state });
+  }, []);
+
+  const flush = useCallback(
+    async (keepalive = false) => {
+      if (inFlight.current || !dirty.current) return;
+      dirty.current = false;
+      inFlight.current = true;
+      if (backend.kind === 'server') setSync('saving');
+      try {
+        const res = await backend.repo.save(session.userId, latest.current, revision.current, { keepalive });
+        if (res.ok) {
+          revision.current = res.revision;
+        } else {
+          dirty.current = false;
+          adoptRemote(res);
+          notify({ kind: 'info', title: 'Date actualizate', body: 'Între timp s-au făcut modificări pe alt dispozitiv; am încărcat versiunea cea mai nouă.' });
+        }
+        if (backend.kind === 'server') setSync('saved');
+      } catch {
+        dirty.current = true;
+        setSync('offline');
+      } finally {
+        inFlight.current = false;
+      }
+      if (dirty.current && navigator.onLine) timer.current = setTimeout(() => flush(), 800);
+    },
+    [backend, session.userId, adoptRemote, notify],
+  );
+
   useEffect(() => {
-    localRepository.save(session.userId, state);
-  }, [state, session.userId]);
+    if (skipSave.current) {
+      skipSave.current = false;
+      return;
+    }
+    dirty.current = true;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => flush(), backend.kind === 'local' ? 0 : 500);
+  }, [state, flush, backend.kind]);
+
+  // reîncearcă dacă serverul a fost indisponibil; preia modificările de pe alte dispozitive
+  useEffect(() => {
+    if (backend.kind !== 'server') return;
+    const refresh = async () => {
+      if (dirty.current || inFlight.current) return flush();
+      try {
+        const remote = await backend.repo.load(session.userId);
+        setSync('saved');
+        if (remote.revision !== revision.current && !dirty.current && !inFlight.current) adoptRemote(remote);
+      } catch {
+        setSync('offline');
+      }
+    };
+    const onVisible = () => document.visibilityState === 'visible' && refresh();
+    const onHide = () => flush(true);
+    const interval = setInterval(refresh, 30_000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('online', refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('online', refresh);
+    };
+  }, [backend, session.userId, flush, adoptRemote]);
 
   // temă
   useEffect(() => {
@@ -136,7 +232,7 @@ export function AppProvider({ session, onLogout, children }: { session: Session;
   );
 
   // evenimente: niveluri noi, realizări, provocări
-  const prev = useRef<{ level: number; attrs: Record<AttributeKey, number>; bonusId?: string } | null>(null);
+  const prev = prevEvents;
   useEffect(() => {
     if (!state.character) return;
     const attrs = Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, derived.attributes[k].level])) as Record<AttributeKey, number>;
@@ -178,6 +274,8 @@ export function AppProvider({ session, onLogout, children }: { session: Session;
     celebration,
     closeCelebration: () => setCelebration(null),
     logout: onLogout,
+    backend,
+    sync,
   };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

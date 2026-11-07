@@ -1,4 +1,4 @@
-import { Coins, Flame, LayoutDashboard, ListChecks, Mountain, Settings, Target, UserRound } from 'lucide-react';
+import { Cloud, CloudOff, Coins, Flame, LayoutDashboard, ListChecks, LoaderCircle, Mountain, Settings, Target, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { activeBonus } from '../domain/engine';
 import { characterTitle } from '../domain/leveling';
@@ -19,7 +19,7 @@ const NAV: { id: View; label: string; icon: ReactNode }[] = [
 const TITLES: Record<View, string> = { today: 'Azi', tasks: 'Sarcini', goals: 'Obiective', character: 'Personaj', settings: 'Setări' };
 
 export function Layout({ view, go, children }: { view: View; go: (v: View) => void; children: ReactNode }) {
-  const { state, derived, toasts, dismissToast, celebration, closeCelebration, now } = useApp();
+  const { state, derived, toasts, dismissToast, celebration, closeCelebration, now, sync } = useApp();
   const c = state.character!;
   const bonus = activeBonus(state, now);
 
@@ -68,6 +68,16 @@ export function Layout({ view, go, children }: { view: View; go: (v: View) => vo
             <span className="strong">{TITLES[view]}</span>
           </div>
           <div className="row" style={{ gap: 8 }}>
+            {sync !== 'local' && (
+              <span
+                className={`badge ${sync === 'offline' ? 'badge-danger' : ''}`}
+                title={sync === 'offline' ? 'Serverul nu răspunde. Modificările vor fi trimise automat.' : sync === 'saving' ? 'Se salvează…' : 'Sincronizat cu serverul'}
+                style={{ height: 28, padding: '0 10px' }}
+              >
+                {sync === 'offline' ? <CloudOff size={14} /> : sync === 'saving' ? <LoaderCircle size={14} className="spin" /> : <Cloud size={14} />}
+                <span className="hide-mobile">{sync === 'offline' ? 'Offline' : sync === 'saving' ? 'Se salvează' : 'Sincronizat'}</span>
+              </span>
+            )}
             <span className="badge" title="Serie curentă" style={{ height: 28, padding: '0 10px', fontSize: 13 }}>
               <Flame size={14} style={{ color: derived.streak.activeToday ? 'var(--warning)' : 'var(--muted)' }} /> {derived.streak.days}
             </span>

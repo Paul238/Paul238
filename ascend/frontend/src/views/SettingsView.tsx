@@ -1,5 +1,5 @@
-import { Download, LogOut, Monitor, Moon, Sun, Upload } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { Cloud, Download, HardDrive, KeyRound, LogOut, Monitor, Moon, Sun, Upload } from 'lucide-react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { WEEKDAY_SHORT, WEEK_ORDER } from '../domain/dates';
 import { createEmptyState, normalizeState } from '../domain/engine';
 import { AVATAR_COLORS } from '../domain/templates';
@@ -8,7 +8,8 @@ import { useApp } from '../state/store';
 import { Modal, Switch } from '../ui/components';
 
 export function SettingsView() {
-  const { state, api, session, logout, notify } = useApp();
+  const { state, api, session, logout, notify, backend } = useApp();
+  const [pwOpen, setPwOpen] = useState(false);
   const s = state.settings;
   const c = state.character!;
   const fileRef = useRef<HTMLInputElement>(null);
@@ -129,12 +130,31 @@ export function SettingsView() {
         </Section>
 
         <Section title="Date și cont">
+          <Row
+            title="Stocare"
+            desc={
+              backend.kind === 'server'
+                ? 'Date salvate pe server (MariaDB) și sincronizate între dispozitive.'
+                : 'Mod local: datele există doar în acest browser. Pornește serverul Docker pentru sincronizare.'
+            }
+          >
+            <span className={`badge ${backend.kind === 'server' ? 'badge-success' : 'badge-warning'}`}>
+              {backend.kind === 'server' ? <Cloud size={13} /> : <HardDrive size={13} />} {backend.kind === 'server' ? 'Server' : 'Local'}
+            </span>
+          </Row>
+          {backend.auth.changePassword && (
+            <Row title="Parolă" desc="Schimbarea parolei deconectează celelalte dispozitive.">
+              <button className="btn" onClick={() => setPwOpen(true)}>
+                <KeyRound size={15} /> Schimbă parola
+              </button>
+            </Row>
+          )}
           <Row title="Cont" desc={session.email}>
-            <button className="btn" onClick={logout}>
+            <button className="btn" onClick={() => logout()}>
               <LogOut size={15} /> Deconectare
             </button>
           </Row>
-          <Row title="Backup" desc="Datele sunt salvate local în browser. Exportă periodic un backup.">
+          <Row title="Backup" desc="Exportă un fișier JSON cu toate datele tale, sau importă unul exportat anterior.">
             <div className="row">
               <button className="btn" onClick={exportData}>
                 <Download size={15} /> Exportă
@@ -153,6 +173,7 @@ export function SettingsView() {
         </Section>
       </div>
 
+      {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
       {confirmReset && (
         <Modal
           size="sm"
@@ -210,5 +231,60 @@ function NumberInput({ value, onChange, suffix, min, max, step = 1 }: { value: n
       <input className="input num" type="number" value={value} min={min} max={max} step={step} onChange={(e) => onChange(Number(e.target.value) || 0)} />
       <span>{suffix}</span>
     </div>
+  );
+}
+
+function PasswordModal({ onClose }: { onClose: () => void }) {
+  const { backend, notify } = useApp();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e?: FormEvent) {
+    e?.preventDefault();
+    setError('');
+    if (next.length < 8) return setError('Parola nouă trebuie să aibă cel puțin 8 caractere.');
+    setBusy(true);
+    try {
+      await backend.auth.changePassword!(current, next);
+      notify({ kind: 'success', title: 'Parola a fost schimbată' });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Eroare.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      size="sm"
+      title="Schimbă parola"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Renunță
+          </button>
+          <button className="btn btn-primary" disabled={busy || !current || !next} onClick={() => submit()}>
+            Salvează
+          </button>
+        </>
+      }
+    >
+      <form className="col" style={{ gap: 14 }} onSubmit={submit}>
+        <div className="field">
+          <label>Parola curentă</label>
+          <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />
+        </div>
+        <div className="field">
+          <label>Parola nouă</label>
+          <input className="input" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+        </div>
+        {error && <div className="error">{error}</div>}
+        <button hidden type="submit" />
+      </form>
+    </Modal>
   );
 }

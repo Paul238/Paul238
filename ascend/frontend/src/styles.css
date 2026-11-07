@@ -420,3 +420,7 @@ p { margin: 0; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--border); }
 .setting-row:first-of-type { border-top: 0; }
 .setting-row .col { max-width: 520px; }
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) { .hide-mobile { display: none; } }

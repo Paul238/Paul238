@@ -1,0 +1,55 @@
+name: ascend
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    image: ascend-app:latest
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:-ascend}
+      DB_USER: ${DB_USER:-ascend}
+      DB_PASSWORD: ${DB_PASSWORD:?Seteaza DB_PASSWORD in fisierul .env}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-ascend}
+      MARIADB_USER: ${DB_USER:-ascend}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Seteaza DB_PASSWORD in fisierul .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Seteaza DB_ROOT_PASSWORD in fisierul .env}
+      TZ: UTC
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # administrare vizuală a bazei de date (opțional):
+  #   docker compose --profile tools up -d   →  http://localhost:8081
+  phpmyadmin:
+    image: phpmyadmin:5
+    profiles: ["tools"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PMA_PORT:-8081}:80"
+    environment:
+      PMA_HOST: db
+    depends_on:
+      - db
+
+volumes:
+  db-data:
