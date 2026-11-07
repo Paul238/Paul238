@@ -2,6 +2,7 @@ import {
   AlarmClock,
   BedDouble,
   Briefcase,
+  CalendarPlus,
   Check,
   Clock,
   Cloud,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
-import { activeBonus, previewReward, tasksForDay, type TodayItem } from '../domain/engine';
+import { activeBonus, calendarDay, previewReward, tasksForDay, type TodayItem } from '../domain/engine';
 import { characterTitle } from '../domain/leveling';
 import { dayTotals, toMinutes, targetsFor } from '../domain/nutrition';
 import type { Task } from '../domain/types';
@@ -35,11 +36,13 @@ import { PALETTE, periodOf } from '../ui/Landscape';
 import { TaskEditor } from '../views/TaskEditor';
 import { Hiker } from './Hiker';
 import { RoutineSetup } from './RoutineSetup';
-import { BonusSheet, MealSheet, NutritionSheet, RecapSheet, TaskSheet, TimeSheet } from './Sheets';
+import { addDays } from '../domain/dates';
+import { PlanDay, dayName } from '../views/PlanDay';
+import { BonusSheet, MealSheet, NutritionSheet, RecapSheet, Sheet, TaskSheet, TimeSheet } from './Sheets';
 
 export type PanelId = 'tasks' | 'goals' | 'hero' | 'settings';
 
-type SheetState = { kind: 'item'; id: string } | { kind: 'bonus' } | { kind: 'nutrition' } | { kind: 'recap' } | null;
+type SheetState = { kind: 'item'; id: string } | { kind: 'bonus' } | { kind: 'nutrition' } | { kind: 'recap' } | { kind: 'plan'; date: string } | null;
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -78,6 +81,7 @@ export type StageStatus = 'done' | 'missed' | 'late' | 'due' | 'todo';
 export function stageStatus(item: TodayItem, nowMin: number): StageStatus {
   const t = item.task;
   if (item.completion) return item.completion.success === false ? 'missed' : 'done';
+  if (item.overdue) return 'late';
   if (t.kind === 'time' && t.time && (t.timeMode ?? 'by') === 'by' && nowMin > toMinutes(t.time) + (t.tolerance ?? 0)) return 'late';
   if (t.time && nowMin > toMinutes(t.time) + 60) return 'due';
   return 'todo';
@@ -160,7 +164,7 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
   const land = LAND[period];
 
   /* ---------- etapele zilei ---------- */
-  const items = useMemo(() => tasksForDay(state, today), [state, today]);
+  const items = useMemo(() => tasksForDay(state, today, { today }), [state, today]);
   const byTime = (a: TodayItem, b: TodayItem) => (a.task.time ?? '99:99').localeCompare(b.task.time ?? '99:99');
   const timeline = useMemo(() => [...items].sort(byTime), [items]);
   // pe drum: întâi ce ai strâns (în ordinea în care le-ai făcut), apoi ce urmează, în ordinea orelor
@@ -317,6 +321,7 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
   const nutrition = state.settings.nutrition;
   const totals = dayTotals(state, today);
   const showNutri = !!nutrition || totals.kcal > 0;
+  const tomorrowCount = calendarDay(state, addDays(today, 1), today).filter((r) => r.status !== 'skipped').length;
 
   return (
     <div className={`journey ${compact ? 'compact' : ''} period-${period}`}>
@@ -477,6 +482,7 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
                 <span className="j-label">
                   <b>{it.task.title}</b>
                   <small>
+                    {it.overdue && <span className="late">restanță</span>}
                     {it.task.time && <span className={st === 'late' ? 'late' : ''}>{it.task.time}</span>}
                     <span className="gold">+{reward}</span>
                   </small>
@@ -603,7 +609,7 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
                 {st === 'done' && <Check size={13} strokeWidth={3} />}
                 {st === 'missed' && <X size={13} strokeWidth={3} />}
                 {it.completion?.value && <i>{it.completion.value}</i>}
-                {st === 'late' && <i>întârziat</i>}
+                {st === 'late' && <i>{it.overdue ? 'restanță' : 'întârziat'}</i>}
               </span>
             </button>
           );
@@ -618,6 +624,10 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
           </button>
         )}
         {timeline.length === 0 && <span className="tl-empty">Desfășurătorul zilei e gol.</span>}
+        <button className="tl-chip tl-tomorrow" onClick={() => setSheet({ kind: 'plan', date: addDays(today, 1) })} title="Planifică ziua de mâine">
+          <CalendarPlus size={14} />
+          <span className="tl-title">Mâine · {tomorrowCount}</span>
+        </button>
       </div>
 
       {bonus?.revealed && <BonusPill expiresAt={bonus.expiresAt} title={bonus.taskTitle} mult={bonus.multiplier} onTap={() => setSheet({ kind: 'item', id: bonus.taskId })} />}
@@ -635,7 +645,16 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
       {/* ---------- foi de jos ---------- */}
       {sheet?.kind === 'item' && <ItemSheet id={sheet.id} onClose={() => setSheet(null)} onEdit={() => setEditor(true)} />}
       {sheet?.kind === 'bonus' && <BonusSheet onClose={() => setSheet(null)} />}
-      {sheet?.kind === 'recap' && <RecapSheet onClose={() => setSheet(null)} onNutrition={() => setSheet({ kind: 'nutrition' })} />}
+      {sheet?.kind === 'recap' && (
+        <RecapSheet onClose={() => setSheet(null)} onNutrition={() => setSheet({ kind: 'nutrition' })} onPlanTomorrow={() => setSheet({ kind: 'plan', date: addDays(today, 1) })} />
+      )}
+      {sheet?.kind === 'plan' && (
+        <Sheet onClose={() => setSheet(null)} accent="#9a8cff">
+          <div className="sheet-eyebrow">Planul zilei</div>
+          <h2 className="sheet-title">{sheet.date === addDays(today, 1) ? `Mâine · ${dayName(sheet.date)}` : dayName(sheet.date)}</h2>
+          <PlanDay date={sheet.date} compact />
+        </Sheet>
+      )}
       {sheet?.kind === 'nutrition' && <NutritionSheet onClose={() => setSheet(null)} onSetup={() => (setSheet(null), setRoutine(true))} />}
       {editor && <TaskEditor onClose={() => setEditor(false)} />}
       {routine && <RoutineSetup onClose={() => setRoutine(false)} />}

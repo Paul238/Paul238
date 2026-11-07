@@ -618,7 +618,7 @@ export function BonusSheet({ onClose }: { onClose: () => void }) {
 
 /* ---------------- rezumatul zilei (tabăra de seară) ---------------- */
 
-export function RecapSheet({ onClose, onNutrition }: { onClose: () => void; onNutrition: () => void }) {
+export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: () => void; onNutrition: () => void; onPlanTomorrow: () => void }) {
   const { state, api, today, derived } = useApp();
   const todays = state.completions.filter((c) => c.date === today);
   const closed = state.days[today];
@@ -630,7 +630,7 @@ export function RecapSheet({ onClose, onNutrition }: { onClose: () => void; onNu
   const xp: Partial<Record<AttributeKey, number>> = {};
   for (const c of todays) for (const [k, v] of Object.entries(c.xp)) xp[k as AttributeKey] = (xp[k as AttributeKey] ?? 0) + (v ?? 0);
   const checks = todays.filter((c) => c.value);
-  const left = tasksForDay(state, today).filter((i) => !i.completion).length;
+  const left = tasksForDay(state, today, { today }).filter((i) => !i.completion).length;
   const dateLabel = new Date().toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
@@ -709,6 +709,9 @@ export function RecapSheet({ onClose, onNutrition }: { onClose: () => void; onNu
             Noapte bună
           </button>
         )}
+        <button className="btn sheet-cta" onClick={onPlanTomorrow} style={{ flexShrink: 0 }}>
+          Planifică mâine
+        </button>
       </div>
     </Sheet>
   );

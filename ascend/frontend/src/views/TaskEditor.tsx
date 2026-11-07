@@ -1,12 +1,12 @@
 import { ChevronDown, Star, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
-import { WEEKDAY_SHORT, WEEK_ORDER } from '../domain/dates';
 import { xpForTask } from '../domain/engine';
 import { uid } from '../domain/id';
 import type { AttributeKey, Schedule, Task, TaskKind, TimeMode } from '../domain/types';
 import { useApp } from '../state/store';
 import { AttributeChips, Modal, Switch } from '../ui/components';
+import { SchedulePicker } from './SchedulePicker';
 
 const PRESETS = [
   { label: 'Ușor', points: 5 },
@@ -20,11 +20,13 @@ export function TaskEditor({
   onClose,
   defaultSpecial = false,
   defaultAttributes = [],
+  defaultSchedule,
 }: {
   task?: Task;
   onClose: () => void;
   defaultSpecial?: boolean;
   defaultAttributes?: AttributeKey[];
+  defaultSchedule?: Schedule;
 }) {
   const { api, state } = useApp();
   const [title, setTitle] = useState(task?.title ?? '');
@@ -39,7 +41,7 @@ export function TaskEditor({
     setSuggested(false);
     setAttributesRaw(v);
   };
-  const [schedule, setSchedule] = useState<Schedule>(task?.schedule ?? { kind: 'daily', days: [] });
+  const [schedule, setSchedule] = useState<Schedule>(task?.schedule ?? defaultSchedule ?? { kind: 'daily', days: [] });
   const [special, setSpecial] = useState(task?.special ?? defaultSpecial);
   const [kind, setKind] = useState<TaskKind>(task?.kind ?? 'task');
   const [time, setTime] = useState(task?.time ?? '');
@@ -47,7 +49,7 @@ export function TaskEditor({
   const [tolerance, setTolerance] = useState(task?.tolerance ?? 10);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const valid = title.trim().length > 0 && attributes.length > 0 && points > 0 && (kind === 'task' || /^\d{2}:\d{2}$/.test(time));
+  const valid = title.trim().length > 0 && points > 0 && (kind === 'task' || /^\d{2}:\d{2}$/.test(time));
   const preview = xpForTask({ points, attributes } as Task, 1);
   const mult = state.settings.bonusMultiplier;
 
@@ -62,7 +64,7 @@ export function TaskEditor({
       title: title.trim(),
       notes: notes.trim() || undefined,
       points,
-      attributes,
+      attributes: attributes.length ? attributes : ['discipline'],
       schedule,
       special: kind === 'task' && special,
       archived: task?.archived ?? false,
@@ -71,7 +73,6 @@ export function TaskEditor({
     onClose();
   }
 
-  const daily = schedule.kind === 'daily' ? schedule : null;
 
   return (
     <Modal
@@ -159,6 +160,7 @@ export function TaskEditor({
         <label>Atribute dezvoltate</label>
         <AttributeChips value={attributes} onChange={setAttributes} />
         {suggested && <span className="hint">Sugerat după titlu — poți schimba.</span>}
+        {attributes.length === 0 && <span className="hint">Opțional — dacă nu alegi, primește Disciplină.</span>}
         <span className="hint">Primul atribut ales primește 100% XP, celelalte 50%. Maxim 3.</span>
       </div>
 
@@ -180,55 +182,8 @@ export function TaskEditor({
       </div>
 
       <div className="field">
-        <label>Frecvență</label>
-        <div className="segmented full">
-          <button type="button" className={schedule.kind === 'daily' ? 'active' : ''} onClick={() => setSchedule({ kind: 'daily', days: [] })}>
-            Zile fixe
-          </button>
-          <button type="button" className={schedule.kind === 'weekly' ? 'active' : ''} onClick={() => setSchedule({ kind: 'weekly', times: 3 })}>
-            De N ori / săptămână
-          </button>
-          <button type="button" className={schedule.kind === 'once' ? 'active' : ''} onClick={() => setSchedule({ kind: 'once' })}>
-            O singură dată
-          </button>
-        </div>
-        {daily && (
-          <div className="col mt-8">
-            <div className="weekday-picker">
-              {WEEK_ORDER.map((d) => {
-                const on = daily.days.length === 0 || daily.days.includes(d);
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    className={on ? 'on' : ''}
-                    onClick={() => {
-                      const base = daily.days.length === 0 ? [0, 1, 2, 3, 4, 5, 6] : daily.days;
-                      const next = base.includes(d) ? base.filter((x) => x !== d) : [...base, d];
-                      if (next.length === 0) return;
-                      setSchedule({ kind: 'daily', days: next.length === 7 ? [] : next });
-                    }}
-                  >
-                    {WEEKDAY_SHORT[d]}
-                  </button>
-                );
-              })}
-            </div>
-            <span className="hint">{daily.days.length === 0 ? 'În fiecare zi.' : 'Doar în zilele selectate.'}</span>
-          </div>
-        )}
-        {schedule.kind === 'weekly' && (
-          <div className="row mt-8">
-            <input className="input num" type="number" min={1} max={7} value={schedule.times} onChange={(e) => setSchedule({ kind: 'weekly', times: Math.max(1, Math.min(7, Number(e.target.value) || 1)) })} style={{ width: 80 }} />
-            <span className="muted">ori pe săptămână, în orice zi (maxim o dată pe zi)</span>
-          </div>
-        )}
-        {schedule.kind === 'once' && (
-          <div className="row mt-8">
-            <span className="muted">Termen (opțional)</span>
-            <input className="input" type="date" value={schedule.due ?? ''} onChange={(e) => setSchedule({ kind: 'once', due: e.target.value || undefined })} style={{ width: 180 }} />
-          </div>
-        )}
+        <label>Când?</label>
+        <SchedulePicker value={schedule} onChange={setSchedule} />
       </div>
 
       <button type="button" className="plan-adv-toggle" onClick={() => setMore(!more)} aria-expanded={more}>
@@ -278,7 +233,7 @@ export function TaskEditor({
 
 /** sugerează atribute din cuvintele titlului */
 const KEYWORDS: [AttributeKey, RegExp][] = [
-  ['health', /(sal[aă]|sport|alerg|antren|yoga|[iî]not|pa[sș]i|plimb|bicicl|somn|ap[aă]|fitness|stretch|vitamin)/i],
+  ['health', /(sal[aă]|sport|alerg|antren|yoga|[iî]not|pa[sș]i|plimb|bicicl|somn|ap[aă]|fitness|stretch|vitamin|dentist|doctor|medic|analize|farmac|control)/i],
   ['intellect', /(citit|carte|curs|[iî]nv[aă][tț]|studi|limb[aă]|lec[tț]i|podcast|document)/i],
   ['creativity', /(desen|muzic|scris|chitar|pian|foto|creativ|pict|jurnal|compun)/i],
   ['discipline', /(medita|trezi|telefon|social media|f[aă]r[aă]|rutin|focus|concentr|du[sș] rece)/i],

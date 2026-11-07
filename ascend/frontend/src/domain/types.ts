@@ -16,8 +16,10 @@ export type Schedule =
   | { kind: 'daily'; days: number[] }
   /** de N ori pe săptămână (luni–duminică), maxim o dată pe zi */
   | { kind: 'weekly'; times: number }
-  /** o singură dată, cu termen opțional */
-  | { kind: 'once'; due?: DateKey };
+  /** o singură dată: la o dată anume (due) sau „când poți” (fără dată) */
+  | { kind: 'once'; due?: DateKey }
+  /** lunar, în ziua `day` a lunii (dacă luna e mai scurtă, în ultima zi) */
+  | { kind: 'monthly'; day: number };
 
 /** task = sarcină obișnuită; time = reper cu oră fixă (trezire, ajuns la muncă…); meal = masă */
 export type TaskKind = 'task' | 'time' | 'meal';
@@ -42,6 +44,8 @@ export interface Task {
   special: boolean;
   archived: boolean;
   createdAt: ISODate;
+  /** zile în care o sarcină recurentă e sărită (excepții din calendar) */
+  skip?: DateKey[];
 }
 
 export interface Completion {

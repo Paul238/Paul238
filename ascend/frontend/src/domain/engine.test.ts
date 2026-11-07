@@ -3,6 +3,7 @@ import {
   activeBonus,
   attributeLevels,
   availableCredits,
+  calendarDay,
   createEmptyState,
   currentStreak,
   goalRequiredCredits,
@@ -221,5 +222,56 @@ describe('scuturi de serie', () => {
   it('fără scut, o zi ratată resetează seria', () => {
     const s = run(setup([task('a')]), complete('a', at(0)), complete('a', at(1)), complete('a', at(3)));
     expect(currentStreak(s, '2026-11-05').days).toBe(1);
+  });
+});
+
+describe('programare flexibilă', () => {
+  it('în anumite zile: sala luni, miercuri, vineri', () => {
+    const s = setup([task('sala', { schedule: { kind: 'daily', days: [1, 3, 5] } })]);
+    const days = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06'].map((d) => tasksForDay(s, d).length);
+    expect(days).toEqual([1, 0, 1, 0, 1]);
+  });
+
+  it('lunar: ziua 31 cade în ultima zi a lunilor scurte', () => {
+    const s = setup([task('factura', { schedule: { kind: 'monthly', day: 31 } })]);
+    expect(tasksForDay(s, '2026-11-30')).toHaveLength(1);
+    expect(tasksForDay(s, '2026-11-29')).toHaveLength(0);
+    expect(tasksForDay(s, '2026-12-31')).toHaveLength(1);
+  });
+
+  it('o dată la o dată anume: apare doar atunci, apoi ca restanță azi', () => {
+    const s = setup([task('dentist', { schedule: { kind: 'once', due: '2026-11-04' } })]);
+    expect(tasksForDay(s, '2026-11-03', { today: '2026-11-03' })).toHaveLength(0);
+    expect(tasksForDay(s, '2026-11-04', { today: '2026-11-03' })).toHaveLength(1);
+    const late = tasksForDay(s, '2026-11-06', { today: '2026-11-06' });
+    expect(late[0]?.overdue).toBe(true);
+    // în calendar, zilele trecute nu primesc restanța
+    expect(tasksForDay(s, '2026-11-05', { today: '2026-11-06' })).toHaveLength(0);
+  });
+
+  it('nu apare înainte să fi fost creată', () => {
+    const s = setup([task('a', { createdAt: at(3) })]);
+    expect(tasksForDay(s, '2026-11-02')).toHaveLength(0);
+    expect(tasksForDay(s, '2026-11-05')).toHaveLength(1);
+  });
+
+  it('calendarul marchează zilele trecute ratate și pe cele viitoare planificate', () => {
+    let s = setup([task('a')]);
+    s = reducer(s, complete('a', at(0)));
+    expect(calendarDay(s, '2026-11-02', '2026-11-04')[0].status).toBe('done');
+    expect(calendarDay(s, '2026-11-03', '2026-11-04')[0].status).toBe('missed');
+    expect(calendarDay(s, '2026-11-06', '2026-11-04')[0].status).toBe('planned');
+  });
+});
+
+describe('excepții pe zi', () => {
+  it('sari peste sala doar mâine, regula rămâne', () => {
+    let s = setup([task('sala', { schedule: { kind: 'daily', days: [1, 3, 5] } })]);
+    s = reducer(s, { type: 'task/skipDate', id: 'sala', date: '2026-11-04', skip: true });
+    expect(tasksForDay(s, '2026-11-04')).toHaveLength(0);
+    expect(tasksForDay(s, '2026-11-06')).toHaveLength(1);
+    expect(calendarDay(s, '2026-11-04', '2026-11-03')[0].status).toBe('skipped');
+    s = reducer(s, { type: 'task/skipDate', id: 'sala', date: '2026-11-04', skip: false });
+    expect(tasksForDay(s, '2026-11-04')).toHaveLength(1);
   });
 });

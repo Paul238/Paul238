@@ -1,20 +1,21 @@
-import { Archive, ArchiveRestore, Gift, Hourglass, ListChecks, Pencil, Plus, Star } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Archive, CalendarDays, ArchiveRestore, Gift, Hourglass, ListChecks, Pencil, Plus, Star } from 'lucide-react';
+import { Fragment, useMemo, useState } from 'react';
 import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
 import { BONUS_CHANCE, bonusEligibleTasks, isOnceDone, scheduleLabel } from '../domain/engine';
 import type { AttributeKey, Task } from '../domain/types';
 import { useApp } from '../state/store';
 import { fmt, fmtDate } from '../ui/format';
 import { AttrTag } from '../ui/icons';
+import { CalendarView } from './CalendarView';
 import { TaskEditor } from './TaskEditor';
 
-type Tab = 'all' | 'special' | 'archive';
+type Tab = 'calendar' | 'all' | 'special' | 'archive';
 
 const FREQ_LABEL = { off: 'oprite', low: 'rar', normal: 'moderat', high: 'des', daily: 'zilnic' } as const;
 
 export function TasksView() {
   const { state, api, now } = useApp();
-  const [tab, setTab] = useState<Tab>('all');
+  const [tab, setTab] = useState<Tab>('calendar');
   const [filter, setFilter] = useState<AttributeKey | 'all'>('all');
   const [editing, setEditing] = useState<Task | 'new' | null>(null);
 
@@ -48,6 +49,9 @@ export function TasksView() {
       </div>
 
       <div className="tabs">
+        <button className={`tab ${tab === 'calendar' ? 'active' : ''}`} onClick={() => setTab('calendar')}>
+          <CalendarDays size={15} /> Calendar
+        </button>
         <button className={`tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
           <ListChecks size={15} /> Toate <span className="count">{active.length}</span>
         </button>
@@ -98,6 +102,10 @@ export function TasksView() {
         </div>
       )}
 
+      {tab === 'calendar' && <CalendarView />}
+
+      {tab !== 'calendar' && (
+      <>
       <div className="row wrap" style={{ marginBottom: 12 }}>
         <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>
           Toate atributele
@@ -126,8 +134,10 @@ export function TasksView() {
             )}
           </div>
         ) : (
-          list.map((t) => (
-            <div key={t.id} className="task-row">
+          grouped(list, tab === 'all').map(({ t, header }) => (
+            <Fragment key={t.id}>
+            {header && <div className="section-label">{header}</div>}
+            <div className="task-row">
               <button
                 className="btn btn-ghost btn-icon"
                 title={t.special ? 'Scoate din lista specială' : 'Adaugă în lista specială'}
@@ -162,9 +172,13 @@ export function TasksView() {
                 {t.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
               </button>
             </div>
+            </Fragment>
           ))
         )}
       </div>
+
+      </>
+      )}
 
       {tab === 'special' && history.length > 0 && (
         <div className="card card-flush mt-16">
@@ -189,4 +203,26 @@ export function TasksView() {
       {editing && <TaskEditor task={editing === 'new' ? undefined : editing} defaultSpecial={tab === 'special'} onClose={() => setEditing(null)} />}
     </>
   );
+}
+
+const GROUPS: [string, (t: Task) => boolean][] = [
+  ['Zilnic', (t) => t.schedule.kind === 'daily' && (t.schedule.days.length === 0 || t.schedule.days.length === 7)],
+  ['În anumite zile', (t) => t.schedule.kind === 'daily'],
+  ['De câteva ori pe săptămână, când vrei', (t) => t.schedule.kind === 'weekly'],
+  ['Lunar', (t) => t.schedule.kind === 'monthly'],
+  ['O singură dată, la o dată anume', (t) => t.schedule.kind === 'once' && !!t.schedule.due],
+  ['Fără dată (până le faci)', () => true],
+];
+
+/** grupează sarcinile după felul în care se repetă, cu titluri de secțiune */
+function grouped(list: Task[], withHeaders: boolean): { t: Task; header?: string }[] {
+  if (!withHeaders) return list.map((t) => ({ t }));
+  const out: { t: Task; header?: string }[] = [];
+  const left = [...list];
+  for (const [name, test] of GROUPS) {
+    const inGroup = left.filter(test).sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'));
+    inGroup.forEach((t, i) => out.push({ t, header: i === 0 ? `${name} · ${inGroup.length}` : undefined }));
+    for (const t of inGroup) left.splice(left.indexOf(t), 1);
+  }
+  return out;
 }

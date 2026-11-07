@@ -53,6 +53,7 @@ function createApi(dispatch: (a: Action) => void) {
     archiveTask: (id: string, archived: boolean) => dispatch({ type: 'task/archive', id, archived }),
     deleteTask: (id: string) => dispatch({ type: 'task/delete', id }),
     toggleSpecial: (id: string) => dispatch({ type: 'task/toggleSpecial', id }),
+    skipDate: (id: string, date: string, skip: boolean) => dispatch({ type: 'task/skipDate', id, date, skip }),
     /** întoarce id-ul completării, ca să poată fi anulată din notificare */
     completeTask: (taskId: string, value?: string) => {
       const id = uid('c');

@@ -94,10 +94,20 @@ export function isOnceDone(state: AppState, task: Task): boolean {
   return task.schedule.kind === 'once' && state.completions.some((c) => c.taskId === task.id);
 }
 
+/** ziua lunii în care cade o sarcină lunară (31 → ultima zi a lunilor scurte) */
+function monthlyDayFor(day: number, date: DateKey) {
+  const [y, m] = date.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return Math.min(Math.max(1, day), last);
+}
+
+/** dacă sarcina e programată în ziua dată (fără a ține cont de completări) */
 export function isScheduledOn(task: Task, date: DateKey): boolean {
-  if (task.schedule.kind !== 'daily') return true;
-  const days = task.schedule.days;
-  return days.length === 0 || days.includes(weekday(date));
+  const s = task.schedule;
+  if (s.kind === 'daily') return s.days.length === 0 || s.days.includes(weekday(date));
+  if (s.kind === 'monthly') return Number(date.slice(8, 10)) === monthlyDayFor(s.day, date);
+  if (s.kind === 'once') return !s.due || s.due === date;
+  return true; // săptămânal flexibil: oricând în săptămână
 }
 
 export type TodayStatus = 'todo' | 'done';
@@ -108,28 +118,56 @@ export interface TodayItem {
   completion?: Completion;
   /** pentru sarcinile săptămânale */
   weekProgress?: { done: number; target: number };
+  /** sarcină cu dată care a trecut și n-a fost făcută (apare azi ca restanță) */
+  overdue?: boolean;
 }
 
-/** sarcinile relevante pentru ziua dată, în ordinea de afișare */
-export function tasksForDay(state: AppState, date: DateKey): TodayItem[] {
+/**
+ * Sarcinile relevante pentru ziua dată.
+ * Cu `today` = ziua dată, sarcinile o-singură-dată trecute și nefăcute apar ca restanțe.
+ */
+export function tasksForDay(state: AppState, date: DateKey, opts: { today?: DateKey } = {}): TodayItem[] {
   const items: TodayItem[] = [];
   for (const task of state.tasks) {
     if (task.archived) continue;
     const completion = state.completions.find((c) => c.taskId === task.id && c.date === date);
+    if (!completion && keyOf(task.createdAt) > date) continue; // nu exista încă
+    if (!completion && task.skip?.includes(date)) continue; // sărită doar în ziua asta
     const s = task.schedule;
-    if (s.kind === 'daily') {
-      if (!isScheduledOn(task, date) && !completion) continue;
-    } else if (s.kind === 'weekly') {
+    if (s.kind === 'weekly') {
       const done = weekCount(state, task.id, date);
       if (done >= s.times && !completion) continue;
       items.push({ task, status: completion ? 'done' : 'todo', completion, weekProgress: { done, target: s.times } });
       continue;
-    } else if (s.kind === 'once') {
-      if (isOnceDone(state, task) && !completion) continue;
     }
+    if (s.kind === 'once') {
+      if (!completion && isOnceDone(state, task)) continue;
+      const overdue = !completion && !!s.due && s.due < date && opts.today === date;
+      if (!completion && s.due && s.due !== date && !overdue) continue;
+      items.push({ task, status: completion ? 'done' : 'todo', completion, overdue });
+      continue;
+    }
+    if (!completion && !isScheduledOn(task, date)) continue;
     items.push({ task, status: completion ? 'done' : 'todo', completion });
   }
   return items;
+}
+
+export type PlanStatus = 'done' | 'missed' | 'planned' | 'skipped';
+
+/** ce apare în calendar într-o zi: sarcinile flexibile apar doar în ziua în care le-ai făcut */
+export function calendarDay(state: AppState, date: DateKey, today: DateKey): { item: TodayItem; status: PlanStatus }[] {
+  const skipped = state.tasks
+    .filter((t) => !t.archived && t.skip?.includes(date) && t.schedule.kind !== 'weekly' && isScheduledOn(t, date))
+    .map((task) => ({ item: { task, status: 'todo' as const }, status: 'skipped' as PlanStatus }));
+  return tasksForDay(state, date, { today })
+    .filter((i) => i.completion || (i.task.schedule.kind !== 'weekly' && !(i.task.schedule.kind === 'once' && !i.task.schedule.due)))
+    .map((item) => ({
+      item,
+      status: (item.completion ? (item.completion.success === false ? 'missed' : 'done') : date < today ? 'missed' : 'planned') as PlanStatus,
+    }))
+    .concat(skipped)
+    .sort((a, b) => (a.item.task.time ?? '99').localeCompare(b.item.task.time ?? '99'));
 }
 
 export function availableCredits(state: AppState): number {
@@ -355,6 +393,7 @@ export type Action =
   | { type: 'task/archive'; id: string; archived: boolean }
   | { type: 'task/delete'; id: string }
   | { type: 'task/toggleSpecial'; id: string }
+  | { type: 'task/skipDate'; id: string; date: DateKey; skip: boolean }
   | { type: 'task/complete'; taskId: string; now: string; id: string; value?: string }
   | { type: 'meal/addFood'; date: DateKey; taskId: string; food: FoodEntry; logId: string }
   | { type: 'meal/removeFood'; date: DateKey; taskId: string; foodId: string }
@@ -416,6 +455,16 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'task/archive':
       return { ...state, tasks: state.tasks.map((t) => (t.id === action.id ? { ...t, archived: action.archived } : t)) };
+
+    case 'task/skipDate':
+      return {
+        ...state,
+        tasks: state.tasks.map((t) =>
+          t.id === action.id
+            ? { ...t, skip: action.skip ? [...new Set([...(t.skip ?? []), action.date])] : (t.skip ?? []).filter((d) => d !== action.date) }
+            : t,
+        ),
+      };
 
     case 'task/toggleSpecial':
       return { ...state, tasks: state.tasks.map((t) => (t.id === action.id ? { ...t, special: !t.special } : t)) };
@@ -748,11 +797,20 @@ export function todayKey(): DateKey {
   return dateKey(new Date());
 }
 
+const DAY_NAMES = ['Dum', 'Lun', 'Mar', 'Mie', 'Joi', 'Vin', 'Sâm'];
+
 export function scheduleLabel(task: Task): string {
   const s = task.schedule;
-  if (s.kind === 'weekly') return `${s.times}× pe săptămână`;
-  if (s.kind === 'once') return s.due ? `O dată · până la ${s.due.split('-').reverse().join('.')}` : 'O singură dată';
-  if (s.days.length === 0 || s.days.length === 7) return 'Zilnic';
-  const names = ['Dum', 'Lun', 'Mar', 'Mie', 'Joi', 'Vin', 'Sâm'];
-  return [1, 2, 3, 4, 5, 6, 0].filter((d) => s.days.includes(d)).map((d) => names[d]).join(', ');
+  if (s.kind === 'weekly') return `${s.times}× pe săptămână, când vrei`;
+  if (s.kind === 'monthly') return `Lunar, pe ${s.day}`;
+  if (s.kind === 'once') {
+    if (!s.due) return 'O dată, când poți';
+    const d = new Date(Number(s.due.slice(0, 4)), Number(s.due.slice(5, 7)) - 1, Number(s.due.slice(8, 10)));
+    return `O dată · ${d.toLocaleDateString('ro-RO', { weekday: 'short', day: 'numeric', month: 'short' })}`;
+  }
+  const days = [...s.days].sort();
+  if (days.length === 0 || days.length === 7) return 'Zilnic';
+  if (days.join() === '1,2,3,4,5') return 'Luni–Vineri';
+  if (days.join() === '0,6') return 'Weekend';
+  return [1, 2, 3, 4, 5, 6, 0].filter((d) => days.includes(d)).map((d) => DAY_NAMES[d]).join(', ');
 }
