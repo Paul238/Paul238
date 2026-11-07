@@ -4,6 +4,7 @@ import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
 import { averageDailyCredits, cooldownFor, developmentXp, goalRequiredCredits, savedInGoals } from '../domain/engine';
 import type { AttributeKey, Goal, GoalMode } from '../domain/types';
 import { useApp } from '../state/store';
+import { Summit } from '../ui/Art';
 import { Bar, Modal } from '../ui/components';
 import { fmt, fmtDate, humanHours, lei } from '../ui/format';
 
@@ -38,12 +39,20 @@ export function GoalsView() {
         </button>
       </div>
 
-      <div className="grid grid-4">
-        <Stat icon={<Coins size={14} style={{ color: 'var(--gold)' }} />} label="Disponibil" value={fmt(derived.available)} sub={`≈ ${lei(derived.available * rate)} · nealocat`} />
-        <Stat icon={<PiggyBank size={14} style={{ color: 'var(--success)' }} />} label="Pus deoparte" value={fmt(saved)} sub={`≈ ${lei(saved * rate)} în obiective`} />
-        <Stat icon={<TrendingUp size={14} style={{ color: 'var(--accent-2)' }} />} label="Ritm mediu" value={fmt(pace)} sub="credite / zi (ultimele 14 zile)" />
-        <Stat icon={<Scale size={14} className="muted" />} label="Curs" value={`${rate} lei`} sub="valoarea unui credit" />
-      </div>
+      <section className="vault">
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div className="k row" style={{ gap: 6 }}>
+            <Coins size={13} /> Credite disponibile
+          </div>
+          <div className="big num mt-8">
+            {fmt(derived.available)}
+            <small>≈ {lei(derived.available * rate)}</small>
+          </div>
+        </div>
+        <VaultStat icon={<PiggyBank size={13} />} k="Pus deoparte" v={fmt(saved)} s={`≈ ${lei(saved * rate)} în obiective`} />
+        <VaultStat icon={<TrendingUp size={13} />} k="Ritm" v={`${fmt(pace)}/zi`} s="media ultimelor 14 zile" />
+        <VaultStat icon={<Scale size={13} />} k="Curs" v={`${rate} lei`} s="valoarea unui credit" />
+      </section>
 
       <div className="tabs mt-24">
         {(Object.keys(MODES) as GoalMode[]).map((m) => (
@@ -89,14 +98,14 @@ export function GoalsView() {
   );
 }
 
-function Stat({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string; sub: string }) {
+function VaultStat({ icon, k, v, s }: { icon: ReactNode; k: string; v: string; s: string }) {
   return (
-    <div className="card stat">
-      <span className="stat-label">
-        {icon} {label}
-      </span>
-      <span className="stat-value">{value}</span>
-      <span className="stat-sub">{sub}</span>
+    <div style={{ position: 'relative', zIndex: 1 }}>
+      <div className="k row" style={{ gap: 6 }}>
+        {icon} {k}
+      </div>
+      <div className="v num">{v}</div>
+      <div className="s">{s}</div>
     </div>
   );
 }
@@ -129,7 +138,7 @@ function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onEdit: ()
         <div className="grow">
           <div className="row" style={{ gap: 6 }}>
             <span className="muted">{MODES[goal.mode].icon}</span>
-            <h2 className="truncate">{goal.title}</h2>
+            <h2 className="truncate display" style={{ fontSize: 21 }}>{goal.title}</h2>
           </div>
           {goal.reason && <p className="muted small mt-8">„{goal.reason}”</p>}
         </div>
@@ -144,6 +153,8 @@ function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onEdit: ()
           </button>
         </div>
       </div>
+
+      <Summit progress={goal.saved / required} funded={funded} variant={goal.title.length} />
 
       <div className="row-between" style={{ alignItems: 'flex-end' }}>
         <div>

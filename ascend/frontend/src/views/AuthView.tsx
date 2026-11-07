@@ -2,6 +2,7 @@ import { Gift, LineChart, Mountain, Wallet } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { AuthError, type Session } from '../services/auth';
 import type { Backend } from '../services/backend';
+import { Landscape } from '../ui/Landscape';
 
 export function AuthView({ backend, onAuth }: { backend: Backend; onAuth: (s: Session) => Promise<void> | void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -29,27 +30,32 @@ export function AuthView({ backend, onAuth }: { backend: Backend; onAuth: (s: Se
   return (
     <div className="auth">
       <aside className="auth-side">
-        <div className="brand">
-          <div className="brand-mark">
-            <Mountain size={16} />
+        <Landscape hour={new Date().getHours() + new Date().getMinutes() / 60} total={5} done={3} decorative />
+        <div className="auth-side-inner">
+          <div className="brand">
+            <div className="brand-mark">
+              <Mountain size={16} />
+            </div>
+            Ascend
           </div>
-          Ascend
-        </div>
-        <div className="col gap-16" style={{ gap: 28 }}>
-          <h1>Munca de azi devine progresul și recompensele de mâine.</h1>
-          <div className="col" style={{ gap: 18 }}>
-            <Feature icon={<LineChart size={17} />} title="Niveluri pe 8 atribute">
-              Sănătate, Intelect, Disciplină, Finanțe și altele cresc cu fiecare sarcină bifată.
-            </Feature>
-            <Feature icon={<Wallet size={17} />} title="Credite pentru obiective reale">
-              Strângi credite și le aloci obiectivelor: un laptop, un curs, o vacanță.
-            </Feature>
-            <Feature icon={<Gift size={17} />} title="Provocări surpriză ×5">
-              Din lista ta specială primești aleatoriu provocări cu termen de 24 de ore.
-            </Feature>
+          <div className="col" style={{ gap: 28 }}>
+            <h1>
+              Fiecare zi e un traseu. <em>Fiecare sarcină, un pas spre vârf.</em>
+            </h1>
+            <div className="col" style={{ gap: 18 }}>
+              <Feature icon={<LineChart size={17} />} title="Niveluri pe 8 atribute">
+                Sănătate, Intelect, Disciplină, Finanțe și altele cresc cu fiecare pas.
+              </Feature>
+              <Feature icon={<Wallet size={17} />} title="Credite pentru vârfuri reale">
+                Un laptop, un curs, o vacanță: le cucerești cu munca ta.
+              </Feature>
+              <Feature icon={<Gift size={17} />} title="Provocări surpriză ×5">
+                Din lista ta specială, la o oră aleatorie, cu 24 de ore pentru a le prinde.
+              </Feature>
+            </div>
           </div>
+          <p className="muted small">Gândește de două ori înainte să cumperi: fiecare leu are în spate muncă reală.</p>
         </div>
-        <p className="muted small">Gândește de două ori înainte să cumperi: fiecare leu are în spate muncă reală.</p>
       </aside>
 
       <div className="auth-form-wrap">

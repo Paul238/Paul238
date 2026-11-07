@@ -1,5 +1,5 @@
 import { Award, Lock } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ACHIEVEMENTS, achievementStats } from '../domain/achievements';
 import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
 import { addDays, weekStart } from '../domain/dates';
@@ -7,7 +7,8 @@ import { attributeXp, longestStreak, totalEarned } from '../domain/engine';
 import { characterTitle } from '../domain/leveling';
 import type { AttributeKey } from '../domain/types';
 import { useApp } from '../state/store';
-import { Avatar, Bar, Radar } from '../ui/components';
+import { Constellation } from '../ui/Art';
+import { Avatar, Bar } from '../ui/components';
 import { fmt, fmtDate, plural } from '../ui/format';
 import { AttrBadge } from '../ui/icons';
 
@@ -19,6 +20,7 @@ export function CharacterView() {
   const xp = attributeXp(state);
   const levels = Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, derived.attributes[k].level])) as Record<AttributeKey, number>;
   const stats = achievementStats(state);
+  const [selected, setSelected] = useState<AttributeKey | null>(null);
 
   const perDay = useMemo(() => {
     const m = new Map<string, number>();
@@ -64,51 +66,64 @@ export function CharacterView() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Personaj</h1>
-          <p>Profilul tău de dezvoltare, construit din fiecare sarcină realizată.</p>
-        </div>
-      </div>
-
-      <div className="grid grid-main">
-        <div className="col" style={{ gap: 16 }}>
-          <div className="card">
-            <div className="row gap-16 wrap">
-              <Avatar name={c.name} color={c.color} size="lg" />
-              <div className="grow" style={{ minWidth: 200 }}>
-                <div className="row">
-                  <h1 style={{ fontSize: 20 }}>{c.name}</h1>
-                  <span className="level-pill">Nivel {derived.level.level}</span>
-                </div>
-                <p className="muted small">
-                  {characterTitle(derived.level.level)} · membru din {fmtDate(c.createdAt, { month: 'long', year: 'numeric' })}
-                </p>
-                <div className="row-between small mt-12">
-                  <span className="muted">Progres spre nivelul {derived.level.level + 1}</span>
-                  <span className="num strong">
-                    {fmt(derived.level.into)} / {fmt(derived.level.needed)} XP
-                  </span>
-                </div>
-                <div className="mt-8">
-                  <Bar value={derived.level.progress} size="lg" />
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-4 mt-16" style={{ gap: 10 }}>
-              <MiniStat label="XP total" value={fmt(derived.level.total)} />
-              <MiniStat label="Sarcini realizate" value={fmt(state.completions.length)} />
-              <MiniStat label="Cea mai lungă serie" value={`${longestStreak(state)} ${plural(longestStreak(state), 'zi', 'zile')}`} />
-              <MiniStat label="Credite câștigate" value={fmt(totalEarned(state))} />
+      <section className="char-hero">
+        <div className="col" style={{ gap: 14, position: 'relative', zIndex: 1 }}>
+          <div className="row">
+            <Avatar name={c.name} color={c.color} />
+            <div>
+              <div className="strong" style={{ fontSize: 16 }}>{c.name}</div>
+              <div className="muted small">pe drum din {fmtDate(c.createdAt, { month: 'long', year: 'numeric' })}</div>
             </div>
           </div>
+          <div>
+            <div className="eyebrow-label">Nivel</div>
+            <div className="row" style={{ alignItems: 'flex-end', gap: 14 }}>
+              <span className="big-level num">{derived.level.level}</span>
+              <span className="display" style={{ fontSize: 26, paddingBottom: 10, fontStyle: 'italic' }}>
+                {characterTitle(derived.level.level)}
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="row-between small">
+              <span className="muted">Spre nivelul {derived.level.level + 1}</span>
+              <span className="num strong">
+                {fmt(derived.level.into)} / {fmt(derived.level.needed)} XP
+              </span>
+            </div>
+            <div className="mt-8">
+              <Bar value={derived.level.progress} size="lg" />
+            </div>
+          </div>
+          <div className="grid grid-2" style={{ gap: 10 }}>
+            <MiniStat label="Altitudine" value={`${fmt(derived.level.total)} m`} />
+            <MiniStat label="Etape urcate" value={fmt(state.completions.length)} />
+            <MiniStat label="Cea mai lungă serie" value={`${longestStreak(state)} ${plural(longestStreak(state), 'zi', 'zile')}`} />
+            <MiniStat label="Credite câștigate" value={fmt(totalEarned(state))} />
+          </div>
+        </div>
+        <Constellation
+          levels={levels}
+          progress={Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, derived.attributes[k].progress])) as Record<AttributeKey, number>}
+          name={c.name}
+          color={c.color}
+          level={derived.level.level}
+          selected={selected}
+          onSelect={(k) => {
+            setSelected(k);
+            document.getElementById(`attr-${k}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
+        />
+      </section>
 
+      <div className="grid grid-main mt-24">
+        <div className="col" style={{ gap: 16 }}>
           <div className="grid grid-2">
             {ATTRIBUTE_KEYS.map((k) => {
               const l = derived.attributes[k];
               const a = ATTRIBUTE_MAP[k];
               return (
-                <div key={k} className="card attr-card">
+                <div key={k} id={`attr-${k}`} className="card attr-card" style={{ ['--c' as string]: a.color, outline: selected === k ? `2px solid ${a.color}` : undefined }}>
                   <div className="row-between">
                     <div className="row">
                       <AttrBadge attr={k} size={32} />
@@ -135,13 +150,6 @@ export function CharacterView() {
         </div>
 
         <div className="col" style={{ gap: 16 }}>
-          <div className="card">
-            <div className="card-head">
-              <h2>Profil atribute</h2>
-            </div>
-            <Radar values={levels} />
-          </div>
-
           <div className="card">
             <div className="card-head">
               <h2>Activitate</h2>
