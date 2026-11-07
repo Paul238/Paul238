@@ -15,12 +15,22 @@ const PRESETS = [
   { label: 'Dificil', points: 50 },
 ];
 
-export function TaskEditor({ task, onClose, defaultSpecial = false }: { task?: Task; onClose: () => void; defaultSpecial?: boolean }) {
+export function TaskEditor({
+  task,
+  onClose,
+  defaultSpecial = false,
+  defaultAttributes = [],
+}: {
+  task?: Task;
+  onClose: () => void;
+  defaultSpecial?: boolean;
+  defaultAttributes?: AttributeKey[];
+}) {
   const { api, state } = useApp();
   const [title, setTitle] = useState(task?.title ?? '');
   const [notes, setNotes] = useState(task?.notes ?? '');
   const [points, setPoints] = useState(task?.points ?? 15);
-  const [attributes, setAttributes] = useState<AttributeKey[]>(task?.attributes ?? []);
+  const [attributes, setAttributes] = useState<AttributeKey[]>(task?.attributes ?? defaultAttributes);
   const [schedule, setSchedule] = useState<Schedule>(task?.schedule ?? { kind: 'daily', days: [] });
   const [special, setSpecial] = useState(task?.special ?? defaultSpecial);
   const [confirmDelete, setConfirmDelete] = useState(false);

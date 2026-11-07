@@ -1,52 +1,90 @@
-import { Mountain } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Mountain, X } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Session } from './services/auth';
 import { resolveBackend, type Backend } from './services/backend';
 import type { Loaded } from './services/storage';
 import { AppProvider, useApp } from './state/store';
+import { Modal, Toasts } from './ui/components';
 import { AuthView } from './views/AuthView';
 import { CharacterView } from './views/CharacterView';
 import { GoalsView } from './views/GoalsView';
-import { Layout, type View } from './views/Layout';
 import { OnboardingView } from './views/OnboardingView';
 import { SettingsView } from './views/SettingsView';
 import { TasksView } from './views/TasksView';
-import { TodayView } from './views/TodayView';
+import { World, type PanelId } from './world/World';
 
-const VIEWS: View[] = ['today', 'tasks', 'goals', 'character', 'settings'];
+const PANELS: PanelId[] = ['tasks', 'goals', 'hero', 'settings'];
 
-function useHashView(): [View, (v: View) => void] {
+/** panoul deschis peste lume este ținut în URL (#/tasks …), ca butonul Înapoi să-l închidă */
+function useHashPanel(): [PanelId | null, (p: PanelId | null) => void] {
   const read = () => {
-    const h = window.location.hash.replace('#/', '') as View;
-    return VIEWS.includes(h) ? h : 'today';
+    const h = window.location.hash.replace('#/', '') as PanelId;
+    return PANELS.includes(h) ? h : null;
   };
-  const [view, setView] = useState<View>(read);
+  const [panel, setPanel] = useState<PanelId | null>(read);
   useEffect(() => {
-    const on = () => setView(read());
+    const on = () => setPanel(read());
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
   return [
-    view,
-    (v) => {
-      window.location.hash = `/${v}`;
-      window.scrollTo({ top: 0 });
+    panel,
+    (p) => {
+      if (p) window.location.hash = `/${p}`;
+      else if (window.location.hash) history.back();
     },
   ];
 }
 
+function Panel({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.overlay') && onClose();
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
+  return (
+    <div className="panel-overlay">
+      <div className="panel">
+        <button className="panel-close" onClick={onClose} aria-label="Înapoi în lume">
+          <X size={20} />
+        </button>
+        <div className="panel-content">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 function Shell() {
-  const { state } = useApp();
-  const [view, go] = useHashView();
+  const { state, toasts, dismissToast, celebration, closeCelebration } = useApp();
+  const [panel, setPanel] = useHashPanel();
   if (!state.character) return <OnboardingView />;
   return (
-    <Layout view={view} go={go}>
-      {view === 'today' && <TodayView go={go} />}
-      {view === 'tasks' && <TasksView />}
-      {view === 'goals' && <GoalsView />}
-      {view === 'character' && <CharacterView />}
-      {view === 'settings' && <SettingsView />}
-    </Layout>
+    <>
+      <World openPanel={setPanel} />
+      {panel && (
+        <Panel onClose={() => setPanel(null)}>
+          {panel === 'tasks' && <TasksView />}
+          {panel === 'goals' && <GoalsView />}
+          {panel === 'hero' && <CharacterView />}
+          {panel === 'settings' && <SettingsView />}
+        </Panel>
+      )}
+      <Toasts toasts={toasts} onDismiss={dismissToast} />
+      {celebration && (
+        <Modal size="sm" title="Nivel nou" onClose={closeCelebration}>
+          <div className="celebrate">
+            <div className="celebrate-level">{celebration.level}</div>
+            <h2 style={{ fontSize: 20, marginTop: 8 }}>Ai ajuns la nivelul {celebration.level}</h2>
+            <p className="muted">
+              Titlu: <strong className="text-2">{celebration.title}</strong>. Consecvența construiește caracter.
+            </p>
+            <button className="btn btn-primary mt-12" onClick={closeCelebration}>
+              Continuă
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -56,7 +94,7 @@ type Boot =
   | { phase: 'auth'; backend: Backend }
   | { phase: 'ready'; backend: Backend; session: Session; loaded: Loaded };
 
-function Splash({ children }: { children?: React.ReactNode }) {
+function Splash({ children }: { children?: ReactNode }) {
   return (
     <div style={{ minHeight: '100%', display: 'grid', placeItems: 'center', padding: 24 }}>
       <div className="col" style={{ alignItems: 'center', gap: 14, textAlign: 'center' }}>
@@ -98,7 +136,9 @@ export default function App() {
     return (
       <Splash>
         <div className="strong">Nu m-am putut conecta la server</div>
-        <div className="muted small" style={{ maxWidth: 360 }}>{boot.message}</div>
+        <div className="muted small" style={{ maxWidth: 360 }}>
+          {boot.message}
+        </div>
         <button className="btn btn-primary" onClick={start}>
           Reîncearcă
         </button>
@@ -115,6 +155,7 @@ export default function App() {
       initial={loaded}
       onLogout={async () => {
         await backend.auth.logout();
+        if (window.location.hash) history.replaceState(null, '', window.location.pathname);
         setBoot({ phase: 'auth', backend });
       }}
     >

@@ -121,7 +121,7 @@ function useWorkCost(credits: number) {
   };
 }
 
-function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onEdit: () => void }) {
+export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onEdit: () => void }) {
   const { state, api, now, derived } = useApp();
   const [modal, setModal] = useState<'allocate' | 'release' | 'purchase' | 'abandon' | null>(null);
   const required = goalRequiredCredits(goal, state.settings);
@@ -399,7 +399,7 @@ function HistoryRow({ goal }: { goal: Goal }) {
   );
 }
 
-function GoalEditor({ goal, defaultMode, onClose }: { goal?: Goal; defaultMode: GoalMode; onClose: () => void }) {
+export function GoalEditor({ goal, defaultMode, onClose }: { goal?: Goal; defaultMode: GoalMode; onClose: () => void }) {
   const { api, state } = useApp();
   const [title, setTitle] = useState(goal?.title ?? '');
   const [mode, setMode] = useState<GoalMode>(goal?.mode ?? defaultMode);

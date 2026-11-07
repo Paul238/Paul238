@@ -15,7 +15,7 @@ export function periodOf(hour: number): Period {
   return 'night';
 }
 
-const PALETTE: Record<Period, { sky: [string, string, string]; far: string; mid: string; near: string; body: string; stars: number; label: string }> = {
+export const PALETTE: Record<Period, { sky: [string, string, string]; far: string; mid: string; near: string; body: string; stars: number; label: string }> = {
   night: { sky: ['#060919', '#10183a', '#2a2a5c'], far: '#1c2150', mid: '#141938', near: '#0c0f26', body: '#f3f0ff', stars: 1, label: 'Noapte' },
   dawn: { sky: ['#252a62', '#9a5a86', '#ffb07c'], far: '#6c5a8e', mid: '#493e71', near: '#2a244f', body: '#ffc58f', stars: 0.35, label: 'Zori' },
   day: { sky: ['#2c5cc2', '#6d9de6', '#d3e5fb'], far: '#7f9dd2', mid: '#4f6fae', near: '#2a3f77', body: '#fff3c9', stars: 0, label: 'Zi' },
