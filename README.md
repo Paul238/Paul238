@@ -1,3 +1,10 @@
+# Paul238
+
+- [`ascend/`](ascend/) — **Ascend**: aplicație web de dezvoltare personală gamificată (sarcini, atribute, credite, obiective). Vezi [ascend/README.md](ascend/README.md).
+- `optimizare-pc.ps1` — script de optimizare Windows (detalii mai jos).
+
+---
+
 # Optimizare PC Windows
 
 Scriptul `optimizare-pc.ps1` face o optimizare sigura (fara „tweak-uri” riscante):
