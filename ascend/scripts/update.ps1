@@ -10,5 +10,6 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     Write-Warn2 "Git nu este instalat: copiaza manual noua versiune a folderului, apoi ruleaza din nou."
 }
 Write-Step "Reconstruiesc si repornesc"
+$env:APP_VERSION = (git rev-parse --short HEAD 2>$null)
 docker compose up -d --build
 Show-Urls

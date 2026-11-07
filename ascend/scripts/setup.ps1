@@ -23,6 +23,7 @@ if (Test-Path "$Root\.env") {
 }
 
 Write-Step "Construiesc si pornesc containerele (prima data dureaza cateva minute)"
+if (Get-Command git -ErrorAction SilentlyContinue) { $env:APP_VERSION = (git rev-parse --short HEAD 2>$null) }
 docker compose up -d --build
 if ($LASTEXITCODE -ne 0) { throw "docker compose a esuat. Vezi mesajele de mai sus." }
 

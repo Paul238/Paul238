@@ -1,6 +1,7 @@
 import { Mountain, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Session } from './services/auth';
+import { APP_VERSION, detectServer } from './services/api';
 import { resolveBackend, type Backend } from './services/backend';
 import type { Loaded } from './services/storage';
 import { AppProvider, useApp } from './state/store';
@@ -54,6 +55,37 @@ function Panel({ children, onClose }: { children: ReactNode; onClose: () => void
   );
 }
 
+/** după o actualizare automată a serverului, tab-urile deschise află că există o versiune nouă */
+function UpdateBanner() {
+  const { backend } = useApp();
+  const [fresh, setFresh] = useState<string | null>(null);
+  useEffect(() => {
+    if (backend.kind !== 'server') return;
+    const check = async () => {
+      const info = await detectServer(4000);
+      if (info?.version && info.version !== APP_VERSION) setFresh(info.version);
+    };
+    const id = setInterval(check, 60_000);
+    const onVisible = () => document.visibilityState === 'visible' && check();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [backend.kind]);
+  if (!fresh) return null;
+  return (
+    <div className="update-banner" role="status">
+      <span>
+        <b>Versiune nouă instalată</b> ({fresh}). Reîncarcă pentru a o folosi.
+      </span>
+      <button className="btn btn-primary btn-sm" onClick={() => window.location.reload()}>
+        Reîncarcă
+      </button>
+    </div>
+  );
+}
+
 function Shell() {
   const { state, toasts, dismissToast, celebration, closeCelebration } = useApp();
   const [panel, setPanel] = useHashPanel();
@@ -70,6 +102,7 @@ function Shell() {
         </Panel>
       )}
       <Toasts toasts={toasts} onDismiss={dismissToast} />
+      <UpdateBanner />
       {celebration && (
         <Modal size="sm" title="Nivel nou" onClose={closeCelebration}>
           <div className="celebrate">

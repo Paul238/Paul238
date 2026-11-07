@@ -4,6 +4,8 @@ WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
+ARG APP_VERSION=local
+ENV VITE_APP_VERSION=$APP_VERSION
 RUN npm run build
 
 # ---------- 2. server web: Apache + PHP ----------

@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: docker/app/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
     image: ascend-app:latest
     restart: unless-stopped
     ports:
@@ -16,6 +18,7 @@ services:
       DB_USER: ${DB_USER:-ascend}
       DB_PASSWORD: ${DB_PASSWORD:?Seteaza DB_PASSWORD in fisierul .env}
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      APP_VERSION: ${APP_VERSION:-local}
     depends_on:
       db:
         condition: service_healthy

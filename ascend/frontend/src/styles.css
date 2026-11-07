@@ -1149,3 +1149,4 @@ button.hud-pill:hover { background: rgba(10, 12, 30, .65); }
 :focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 .j-label { align-items: center; }
 .plan-time { width: 124px; }
+.update-banner { position: fixed; z-index: 70; left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top)); display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 16px; border-radius: 14px; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); box-shadow: var(--shadow); font-size: 13.5px; animation: rise .3s; max-width: calc(100vw - 24px); }

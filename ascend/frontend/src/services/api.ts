@@ -47,7 +47,11 @@ export async function request<T>(path: string, { method = 'GET', body, keepalive
 
 export interface ServerInfo {
   registration: boolean;
+  version?: string;
 }
+
+/** versiunea cu care a fost construită interfața (setată la build din git) */
+export const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? 'dev';
 
 /** verifică dacă aplicația este servită de backend-ul Ascend */
 export async function detectServer(timeoutMs = 3000): Promise<ServerInfo | null> {
@@ -57,7 +61,7 @@ export async function detectServer(timeoutMs = 3000): Promise<ServerInfo | null>
     const res = await fetch('api/health', { signal: ctrl.signal, credentials: 'same-origin' });
     if (!res.ok) return null;
     const data = await res.json();
-    return data && data.service === 'ascend' ? { registration: !!data.registration } : null;
+    return data && data.service === 'ascend' ? { registration: !!data.registration, version: data.version } : null;
   } catch {
     return null;
   } finally {

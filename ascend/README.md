@@ -51,9 +51,18 @@ Scriptul generează automat fișierul `.env` cu parole aleatorii pentru baza de 
 | Oprește | `oprire.cmd` |
 | Backup | `backup.cmd` → fișier `.sql` în `backups\` (se păstrează ultimele 30) |
 | Restaurare | `powershell -ExecutionPolicy Bypass -File scripts\restore.ps1 -File backups\ascend_....sql` |
-| Actualizare | `actualizare.cmd` |
+| Actualizare manuală | `actualizare.cmd` |
+| Actualizare automată | `actualizare-automata-pornire.cmd` (o singură dată) |
 | Administrare bază de date | `docker compose --profile tools up -d` → http://localhost:8081 (phpMyAdmin) |
 | Jurnale (în caz de probleme) | `docker compose logs -f app` |
+
+### Actualizare automată („deploy” fără PowerShell)
+Dă **o singură dată** dublu-click pe `actualizare-automata-pornire.cmd`. Se creează în Windows sarcina programată *Ascend Auto-Update*, care la fiecare 5 minute (și la logare) verifică dacă există o versiune nouă pe GitHub. Dacă există, face backup, o descarcă și reconstruiește aplicația — fără nicio comandă din partea ta.
+
+- În aplicație apare „Versiune nouă instalată · Reîncarcă”; versiunea curentă se vede în *Setări → Cont și date*.
+- Jurnalul actualizărilor: `backups\auto-update.log`.
+- Oprire: `actualizare-automata-oprire.cmd`.
+- Condiții: Docker Desktop instalat, Git cu acces la repository (prima dată poate cere logarea în GitHub), laptopul pornit și tu logat în Windows.
 
 ### 5. Pe telefon
 Telefonul și laptopul trebuie să fie în **aceeași rețea Wi-Fi**. Deschide adresa afișată de script, de forma `http://192.168.x.x:8080`. Din meniul browserului alege *Adaugă pe ecranul de pornire* și o vei folosi ca pe o aplicație.

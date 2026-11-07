@@ -21,6 +21,7 @@ match ("$method $path") {
         'ok' => true,
         'service' => 'ascend',
         'registration' => Config::bool('ALLOW_REGISTRATION', true),
+        'version' => Config::get('APP_VERSION', 'local'),
     ]),
     'POST /auth/register' => Auth::register(),
     'POST /auth/login' => Auth::login(),

@@ -5,6 +5,7 @@ import { BONUS_CHANCE, MAX_SHIELDS, SHIELD_EVERY, averageDailyCredits, createEmp
 import { DEFAULT_NUTRITION, targetsFor } from '../domain/nutrition';
 import { AVATAR_COLORS } from '../domain/templates';
 import type { BonusFrequency, GoalMode, Task } from '../domain/types';
+import { APP_VERSION } from '../services/api';
 import { useApp } from '../state/store';
 import { Modal, Switch } from '../ui/components';
 import { fmt } from '../ui/format';
@@ -274,6 +275,9 @@ export function SettingsView() {
                 <span className={`badge ${backend.kind === 'server' ? 'badge-success' : 'badge-warning'}`}>
                   {backend.kind === 'server' ? <Cloud size={13} /> : <HardDrive size={13} />} {backend.kind === 'server' ? 'Server' : 'Local'}
                 </span>
+              </Row>
+              <Row title="Versiunea aplicației" desc={backend.kind === 'server' ? 'Se actualizează automat dacă ai pornit actualizarea automată pe laptop.' : 'Mod local.'}>
+                <span className="badge num">{APP_VERSION}</span>
               </Row>
               <Row title="Cont" desc={session.email}>
                 <button className="btn" onClick={() => logout()}>
