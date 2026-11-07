@@ -35,11 +35,11 @@ import { PALETTE, periodOf } from '../ui/Landscape';
 import { TaskEditor } from '../views/TaskEditor';
 import { Hiker } from './Hiker';
 import { RoutineSetup } from './RoutineSetup';
-import { BonusSheet, MealSheet, NutritionSheet, TaskSheet, TimeSheet } from './Sheets';
+import { BonusSheet, MealSheet, NutritionSheet, RecapSheet, TaskSheet, TimeSheet } from './Sheets';
 
 export type PanelId = 'tasks' | 'goals' | 'hero' | 'settings';
 
-type SheetState = { kind: 'item'; id: string } | { kind: 'bonus' } | { kind: 'nutrition' } | null;
+type SheetState = { kind: 'item'; id: string } | { kind: 'bonus' } | { kind: 'nutrition' } | { kind: 'recap' } | null;
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -91,11 +91,43 @@ function ridge(width: number, base: number, amp: number, step: number, seed: num
   let s = seed;
   const rnd = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
   let d = `M0 ${base}`;
+  const peaks: [number, number][] = [];
   for (let x = 0; x <= width + step; x += step) {
-    const y = base - amp * (0.35 + rnd() * 0.65);
-    d += ` L${x + rnd() * step * jag} ${y}`;
+    const k = rnd();
+    const y = base - amp * (0.35 + k * 0.65);
+    const px = x + rnd() * step * jag;
+    d += ` L${px} ${y}`;
+    if (k > 0.72) peaks.push([px, y]);
   }
-  return d + ` L${width + step} 4000 L0 4000 Z`;
+  return { d: d + ` L${width + step} 4000 L0 4000 Z`, peaks };
+}
+
+/** calote de zăpadă pe vârfurile cele mai înalte */
+function snowCaps(peaks: [number, number][]) {
+  return peaks.map(([x, y]) => `M${x - 22} ${y + 26} L${x} ${y} L${x + 22} ${y + 26} L${x + 12} ${y + 20} L${x + 4} ${y + 28} L${x - 6} ${y + 19} L${x - 14} ${y + 27} Z`).join(' ');
+}
+
+/** iarbă, pietre și flori pe marginea drumului */
+function roadside(width: number, y: number, seed: number) {
+  let s = seed;
+  const rnd = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+  const grass: string[] = [];
+  const stones: string[] = [];
+  const flowers: { x: number; y: number; c: number }[] = [];
+  for (let x = 0; x < width; x += 18 + rnd() * 30) {
+    const h = 6 + rnd() * 9;
+    grass.push(`M${x} ${y} Q${x - 3} ${y - h * 0.6} ${x - 5} ${y - h} M${x} ${y} Q${x + 1} ${y - h * 0.7} ${x + 2} ${y - h * 1.15} M${x} ${y} Q${x + 4} ${y - h * 0.5} ${x + 7} ${y - h * 0.8}`);
+    if (rnd() > 0.72) stones.push(`M${x + 10} ${y + 30} a${4 + rnd() * 4} ${2.5 + rnd() * 2} 0 1 0 0.1 0 Z`);
+    if (rnd() > 0.8) flowers.push({ x: x + 6, y: y - 4 - rnd() * 6, c: Math.floor(rnd() * 3) });
+  }
+  return { grass: grass.join(' '), stones: stones.join(' '), flowers };
+}
+
+/** amestecă două culori hex (t = 0 → a, t = 1 → b) */
+function mix(a: string, b: string, t: number) {
+  const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
 }
 
 function trees(width: number, base: number, seed: number, scale: number) {
@@ -194,6 +226,26 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charX]);
+  // când ai strâns tot, după ce drumețul ajunge la tabără, se deschide o dată rezumatul
+  useEffect(() => {
+    if (!allDone) return;
+    const key = `ascend.recap.${today}`;
+    try {
+      if (localStorage.getItem(key)) return;
+    } catch {
+      return;
+    }
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(key, '1');
+      } catch {
+        /* ignorat */
+      }
+      setSheet((s) => s ?? { kind: 'recap' });
+    }, (walk.dur || 0.6) * 1000 + 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDone, today]);
   const [bagBump, setBagBump] = useState(0);
   useEffect(() => {
     if (!justCollected) return;
@@ -234,9 +286,12 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
   const layers = useMemo(() => {
     const H = size.h;
     const W = roadLen + size.w;
+    const far = ridge(W * 0.2 + size.w, H * 0.5, H * 0.26, 140, 11, 0.6);
     return {
-      far: ridge(W * 0.2 + size.w, H * 0.5, H * 0.26, 140, 11, 0.6),
-      mid: ridge(W * 0.45 + size.w, groundY - 70, H * 0.16, 90, 23, 0.8),
+      far: far.d,
+      snow: snowCaps(far.peaks),
+      mid: ridge(W * 0.45 + size.w, groundY - 70, H * 0.16, 90, 23, 0.8).d,
+      side: roadside(roadLen + size.w, groundY - 8, 59),
       treesFar: trees(W * 0.7 + size.w, groundY - 34, 31, 0.8),
       treesNear: trees(W * 1.25 + size.w, H + 12, 47, 0.95),
     };
@@ -274,6 +329,15 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
         <span className="j-glow" style={{ left: `${sky.x * 100}%`, top: `${sky.y * 100}%`, background: `radial-gradient(circle, ${pal.body}88, transparent 65%)` }} />
         <span className={`j-body ${sky.isSun ? 'sun' : 'moon'}`} style={{ left: `${sky.x * 100}%`, top: `${sky.y * 100}%`, background: pal.body, ['--sky' as string]: pal.sky[1] }} />
         {(period === 'day' || period === 'dawn') && (
+          <div className="j-birds" aria-hidden="true">
+            {[0, 1, 2].map((i) => (
+              <svg key={i} viewBox="0 0 24 10" width={18 - i * 3} style={{ top: `${18 + i * 5}%`, animationDelay: `${i * 1.6}s` }}>
+                <path d="M1 6 Q6 0 12 6 Q18 0 23 6" fill="none" stroke="rgba(30,30,50,.55)" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            ))}
+          </div>
+        )}
+        {(period === 'day' || period === 'dawn') && (
           <div className="j-clouds" style={{ opacity: period === 'day' ? 0.85 : 0.5 }}>
             <span style={{ left: '8%', top: '22%', width: 220 }} />
             <span style={{ left: '46%', top: '14%', width: 300 }} />
@@ -292,11 +356,25 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
         }}
       >
         <svg className="j-layer" style={layer(0.2)} width={roadLen * 0.2 + size.w * 1.2} height={size.h} aria-hidden="true">
-          <path d={layers.far} fill={pal.far} opacity="0.75" />
+          <defs>
+            <linearGradient id="j-far" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={mix(pal.far, '#ffffff', period === 'day' ? 0.25 : 0.12)} />
+              <stop offset="0.55" stopColor={pal.far} />
+              <stop offset="1" stopColor={mix(pal.far, pal.sky[2], 0.35)} />
+            </linearGradient>
+          </defs>
+          <path d={layers.far} fill="url(#j-far)" opacity="0.85" />
+          <path d={layers.snow} fill="#fff" opacity={period === 'night' ? 0.35 : 0.75} />
         </svg>
         <div className="j-haze" style={{ top: groundY - size.h * 0.35, background: `linear-gradient(180deg, transparent, ${pal.sky[2]}33, transparent)` }} />
         <svg className="j-layer" style={layer(0.45)} width={roadLen * 0.45 + size.w * 1.2} height={size.h} aria-hidden="true">
-          <path d={layers.mid} fill={land.hills} />
+          <defs>
+            <linearGradient id="j-mid" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={mix(land.hills, '#ffffff', 0.12)} />
+              <stop offset="1" stopColor={mix(land.hills, land.trees, 0.6)} />
+            </linearGradient>
+          </defs>
+          <path d={layers.mid} fill="url(#j-mid)" />
         </svg>
         <svg className="j-layer" style={layer(0.7)} width={roadLen * 0.7 + size.w * 1.2} height={size.h} aria-hidden="true">
           <path d={layers.treesFar} fill={land.trees} />
@@ -306,6 +384,19 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
         <div className="j-road" style={{ ...layer(1), width: roadLen + size.w }}>
           <div className="j-ground" style={{ top: groundY - 8, background: land.ground }} />
           <div className="j-path" style={{ top: groundY - 6, width: roadLen }} />
+          <svg className="j-roadside" width={roadLen + size.w} height={size.h} aria-hidden="true">
+            <path d={layers.side.grass} stroke={mix(land.ground, '#ffffff', 0.18)} strokeWidth="1.6" fill="none" strokeLinecap="round" />
+            <path d={layers.side.stones} fill="#000" opacity="0.18" />
+            {(period === 'day' || period === 'dawn') &&
+              layers.side.flowers.map((f, i) => <circle key={i} cx={f.x} cy={f.y} r="2.6" fill={['#ffd36b', '#ff9ec7', '#ffffff'][f.c]} />)}
+          </svg>
+          {(period === 'night' || period === 'dusk') && (
+            <div className="j-fireflies" style={{ top: groundY - 150, width: roadLen + size.w }}>
+              {Array.from({ length: Math.round((roadLen + size.w) / 90) }, (_, i) => (
+                <span key={i} style={{ left: ((i * 137) % (roadLen + size.w)) + 'px', top: ((i * 53) % 120) + 'px', animationDelay: `${(i * 0.7) % 5}s` }} />
+              ))}
+            </div>
+          )}
 
           {/* casa (dimineața) */}
           <div className="j-home" style={{ left: homeX - 60, top: groundY - 118 }}>
@@ -411,7 +502,7 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
           )}
 
           {/* tabăra de seară */}
-          <div className={`j-camp ${allDone ? 'lit' : ''}`} style={{ left: campX - 20, top: groundY - 92 }}>
+          <button className={`j-camp ${allDone ? 'lit' : ''}`} style={{ left: campX - 20, top: groundY - 92 }} onClick={tap(() => setSheet({ kind: 'recap' }))} aria-label="Tabăra de seară: rezumatul zilei">
             <svg viewBox="0 0 140 100" width="140" height="100" aria-hidden="true">
               <path d="M10 96 L52 20 L94 96 Z" fill="#d8693f" />
               <path d="M52 20 L94 96 L52 96 Z" fill="#000" opacity="0.2" />
@@ -426,12 +517,18 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
                 )}
               </g>
             </svg>
-            <span className="j-tag">{allDone ? 'Tabăra de seară · ai ajuns!' : 'Tabăra de seară'}</span>
-          </div>
+            <span className="j-tag">{allDone ? 'Tabăra de seară · vezi rezumatul' : 'Tabăra de seară · rezumat'}</span>
+          </button>
 
           {/* drumețul */}
           <div className="j-hiker" style={{ left: charX - 40, top: groundY - 100, transition: dragRef.current ? 'none' : `left ${walk.dur || 0.6}s cubic-bezier(.45,.05,.35,1)` }}>
             <Hiker color={c.color} walking={walk.on} bag={done.length} bump={bagBump} />
+            {state.completions.length === 0 && n > 0 && !walk.on && (
+              <div className="j-bubble">
+                Când faci o etapă, atinge-o — eu merg până la ea și o pun în rucsac!
+              </div>
+            )}
+            {allDone && !walk.on && <div className="j-bubble j-bubble-gold">Am ajuns! Atinge tabăra pentru rezumat.</div>}
           </div>
         </div>
 
@@ -459,9 +556,14 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
               {sync === 'offline' ? <CloudOff size={15} /> : sync === 'saving' ? <LoaderCircle size={15} className="spin" /> : <Cloud size={15} />}
             </span>
           )}
-          <span className="hud-pill" title="Serie de zile">
+          <span className="hud-pill" title={derived.streak.activeToday ? 'Serie de zile · azi ești activ' : 'Serie de zile · bifează ceva azi ca s-o continui'}>
             <Flame size={15} className={derived.streak.activeToday ? 'flame-on' : undefined} />
             <b className="num">{derived.streak.days}</b>
+            {derived.streak.shields > 0 && (
+              <span className="hud-shield" title={`${derived.streak.shields} ${derived.streak.shields === 1 ? 'scut' : 'scuturi'}: o zi ratată nu rupe seria`}>
+                🛡{derived.streak.shields}
+              </span>
+            )}
           </span>
           <button className="hud-pill hud-pill-gold" onClick={() => openPanel('goals')} title="Credite disponibile">
             <Coins size={15} />
@@ -533,6 +635,7 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
       {/* ---------- foi de jos ---------- */}
       {sheet?.kind === 'item' && <ItemSheet id={sheet.id} onClose={() => setSheet(null)} onEdit={() => setEditor(true)} />}
       {sheet?.kind === 'bonus' && <BonusSheet onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'recap' && <RecapSheet onClose={() => setSheet(null)} onNutrition={() => setSheet({ kind: 'nutrition' })} />}
       {sheet?.kind === 'nutrition' && <NutritionSheet onClose={() => setSheet(null)} onSetup={() => (setSheet(null), setRoutine(true))} />}
       {editor && <TaskEditor onClose={() => setEditor(false)} />}
       {routine && <RoutineSetup onClose={() => setRoutine(false)} />}

@@ -24,6 +24,8 @@ export interface Toast {
   kind: ToastKind;
   title: string;
   body?: string;
+  /** acțiune rapidă, de ex. „Anulează” */
+  action?: { label: string; run: () => void };
 }
 
 export interface Celebration {
@@ -51,7 +53,12 @@ function createApi(dispatch: (a: Action) => void) {
     archiveTask: (id: string, archived: boolean) => dispatch({ type: 'task/archive', id, archived }),
     deleteTask: (id: string) => dispatch({ type: 'task/delete', id }),
     toggleSpecial: (id: string) => dispatch({ type: 'task/toggleSpecial', id }),
-    completeTask: (taskId: string, value?: string) => dispatch({ type: 'task/complete', taskId, now: now(), id: uid('c'), value }),
+    /** întoarce id-ul completării, ca să poată fi anulată din notificare */
+    completeTask: (taskId: string, value?: string) => {
+      const id = uid('c');
+      dispatch({ type: 'task/complete', taskId, now: now(), id, value });
+      return id;
+    },
     addFood: (date: string, taskId: string, food: Omit<FoodEntry, 'id'>) =>
       dispatch({ type: 'meal/addFood', date, taskId, food: { ...food, id: uid('f') }, logId: uid('m') }),
     removeFood: (date: string, taskId: string, foodId: string) => dispatch({ type: 'meal/removeFood', date, taskId, foodId }),
@@ -86,7 +93,7 @@ interface AppContextValue {
   api: Api;
   derived: {
     available: number;
-    streak: { days: number; activeToday: boolean };
+    streak: { days: number; activeToday: boolean; shields: number };
     level: ReturnType<typeof characterLevel>;
     attributes: ReturnType<typeof attributeLevels>;
   };
@@ -128,7 +135,7 @@ export function AppProvider({
   const notify = useCallback((t: Omit<Toast, 'id'>) => {
     const id = uid('t');
     setToasts((ts) => [...ts.slice(-2), { ...t, id }]);
-    setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), t.kind === 'error' ? 6000 : 4500);
+    setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), t.action ? 6000 : t.kind === 'error' ? 6000 : 4000);
   }, []);
   const dismissToast = useCallback((id: string) => setToasts((ts) => ts.filter((x) => x.id !== id)), []);
 

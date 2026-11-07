@@ -1,22 +1,46 @@
-import { Cloud, Download, HardDrive, KeyRound, LogOut, Monitor, Moon, Sun, Upload } from 'lucide-react';
+import { AlarmClock, Cloud, Download, Gift, HardDrive, KeyRound, LogOut, Monitor, Moon, Palette, Pencil, Plus, Shield, Sun, Trash2, Upload, User, Utensils, Wallet } from 'lucide-react';
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { WEEKDAY_SHORT, WEEK_ORDER } from '../domain/dates';
-import { createEmptyState, normalizeState } from '../domain/engine';
+import { BONUS_CHANCE, MAX_SHIELDS, SHIELD_EVERY, averageDailyCredits, createEmptyState, normalizeState, scheduleLabel } from '../domain/engine';
+import { DEFAULT_NUTRITION, targetsFor } from '../domain/nutrition';
 import { AVATAR_COLORS } from '../domain/templates';
-import type { BonusFrequency, GoalMode } from '../domain/types';
+import type { BonusFrequency, GoalMode, Task } from '../domain/types';
 import { useApp } from '../state/store';
-import { DEFAULT_NUTRITION } from '../domain/nutrition';
 import { Modal, Switch } from '../ui/components';
+import { fmt } from '../ui/format';
+import { Hiker } from '../world/Hiker';
 import { NutritionForm, RoutineSetup } from '../world/RoutineSetup';
+import { TaskEditor } from './TaskEditor';
+
+type SectionId = 'profile' | 'day' | 'nutrition' | 'rewards' | 'bonus' | 'account';
+
+const FREQ: { v: BonusFrequency; label: string }[] = [
+  { v: 'off', label: 'Oprite' },
+  { v: 'low', label: 'Rar' },
+  { v: 'normal', label: 'Moderat' },
+  { v: 'high', label: 'Des' },
+  { v: 'daily', label: 'Zilnic' },
+];
+
+function timeRule(t: Task) {
+  if (t.kind === 'meal') return `Masă · în jur de ${t.time}`;
+  const mode = t.timeMode ?? 'by';
+  if (mode === 'log') return `Notez ora · reper ${t.time}`;
+  return `${mode === 'by' ? 'Cel târziu' : 'Cel devreme'} la ${t.time}${t.tolerance ? ` · ±${t.tolerance} min` : ''}`;
+}
 
 export function SettingsView() {
-  const { state, api, session, logout, notify, backend } = useApp();
-  const [pwOpen, setPwOpen] = useState(false);
-  const [routineOpen, setRoutineOpen] = useState(false);
+  const { state, api, session, logout, notify, backend, today } = useApp();
   const s = state.settings;
   const c = state.character!;
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [section, setSection] = useState<SectionId>('profile');
+  const [pwOpen, setPwOpen] = useState(false);
+  const [routineOpen, setRoutineOpen] = useState(false);
+  const [editing, setEditing] = useState<Task | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const routine = state.tasks.filter((t) => !t.archived && (t.kind === 'time' || t.kind === 'meal')).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+  const pace = averageDailyCredits(state, today);
 
   function exportData() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -40,162 +64,253 @@ export function SettingsView() {
 
   const setCooldown = (m: GoalMode, v: number) => api.updateSettings({ cooldownHours: { ...s.cooldownHours, [m]: Math.max(0, v) } });
 
+  const NAV: { id: SectionId; icon: ReactNode; label: string; status: string }[] = [
+    { id: 'profile', icon: <User size={17} />, label: 'Profil și aspect', status: `${c.name} · ${s.theme === 'system' ? 'tema sistemului' : s.theme === 'dark' ? 'întunecat' : 'luminos'}` },
+    { id: 'day', icon: <AlarmClock size={17} />, label: 'Ziua mea', status: routine.length ? `${routine.length} repere și mese` : 'neconfigurată' },
+    { id: 'nutrition', icon: <Utensils size={17} />, label: 'Nutriție', status: s.nutrition ? `${fmt(targetsFor(s.nutrition).kcal)} kcal / zi` : 'oprită' },
+    { id: 'rewards', icon: <Wallet size={17} />, label: 'Recompense și serie', status: `1 credit = ${s.leiPerCredit} ${s.leiPerCredit === 1 ? 'leu' : 'lei'}` },
+    { id: 'bonus', icon: <Gift size={17} />, label: 'Provocări surpriză', status: s.bonusFrequency === 'off' ? 'oprite' : `${FREQ.find((f) => f.v === s.bonusFrequency)!.label.toLowerCase()} · ×${s.bonusMultiplier}` },
+    { id: 'account', icon: <Shield size={17} />, label: 'Cont și date', status: backend.kind === 'server' ? 'sincronizat cu serverul' : 'doar în acest browser' },
+  ];
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Setări</h1>
-          <p>Ajustează regulile jocului după stilul tău.</p>
+          <p>Toate regulile jocului, pe înțelesul tuturor. Modificările se salvează automat.</p>
         </div>
       </div>
 
-      <div className="col" style={{ gap: 16, maxWidth: 820 }}>
-        <Section title="Profil">
-          <Row title="Nume afișat">
-            <input className="input" style={{ width: 240 }} value={c.name} onChange={(e) => api.updateCharacter({ name: e.target.value })} />
-          </Row>
-          <Row title="Culoare avatar">
-            <div className="row">
-              {AVATAR_COLORS.map((col) => (
-                <button key={col} className={`color-swatch ${col === c.color ? 'on' : ''}`} style={{ background: col }} onClick={() => api.updateCharacter({ color: col })} aria-label={col} />
-              ))}
-            </div>
-          </Row>
-          <Row title="Temă">
-            <div className="segmented">
-              {(
-                [
-                  ['system', <Monitor size={14} key="m" />, 'Sistem'],
-                  ['dark', <Moon size={14} key="d" />, 'Întunecat'],
-                  ['light', <Sun size={14} key="l" />, 'Luminos'],
-                ] as const
-              ).map(([v, icon, label]) => (
-                <button key={v} className={s.theme === v ? 'active' : ''} onClick={() => api.updateSettings({ theme: v })}>
-                  <span className="row" style={{ gap: 6 }}>
-                    {icon} {label}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </Row>
-        </Section>
-
-        <Section title="Ziua mea și nutriție">
-          <Row title="Repere și mese zilnice" desc="Trezire, ajuns la muncă, mese, culcare: apar pe drum și în desfășurător.">
-            <button className="btn" onClick={() => setRoutineOpen(true)}>
-              Adaugă repere
+      <div className="settings">
+        <nav className="settings-nav" aria-label="Secțiuni setări">
+          {NAV.map((n) => (
+            <button key={n.id} className={`settings-nav-item ${section === n.id ? 'active' : ''}`} onClick={() => setSection(n.id)}>
+              <span className="settings-nav-icon">{n.icon}</span>
+              <span className="grow">
+                <b>{n.label}</b>
+                <small>{n.status}</small>
+              </span>
             </button>
-          </Row>
-          <div className="setting-row" style={{ display: 'block' }}>
-            <div className="row-between" style={{ marginBottom: 12 }}>
-              <div className="col">
-                <span className="strong">Profil nutrițional</span>
-                <span className="muted small">Pe baza lui se calculează țintele de calorii și macronutrienți și scorul zilnic.</span>
+          ))}
+        </nav>
+
+        <div className="settings-body">
+          {section === 'profile' && (
+            <Section title="Profil și aspect" desc="Cum arăți pe drum și cum arată aplicația.">
+              <div className="settings-hero" style={{ ['--c' as string]: c.color }}>
+                <Hiker color={c.color} walking={false} bag={0} bump={0} />
+                <div>
+                  <b className="display" style={{ fontSize: 22 }}>{c.name}</b>
+                  <div className="muted small">așa te văd pe drum</div>
+                </div>
               </div>
-              <Switch checked={!!s.nutrition} onChange={(v) => api.updateSettings({ nutrition: v ? DEFAULT_NUTRITION : undefined })} label="Profil nutrițional" />
-            </div>
-            {s.nutrition && <NutritionForm value={s.nutrition} onChange={(n) => api.updateSettings({ nutrition: n })} />}
-          </div>
-        </Section>
-
-        <Section title="Economie">
-          <Row title="Valoarea unui credit" desc="Determină câte credite costă un obiectiv. Se aplică și obiectivelor existente.">
-            <NumberInput value={s.leiPerCredit} step={0.1} min={0.1} suffix="lei" onChange={(v) => api.updateSettings({ leiPerCredit: Math.max(0.1, v) })} />
-          </Row>
-          <Row title="Reflecție · Cumpărături" desc="Ore de gândire înainte ca un obiectiv nou să poată primi credite.">
-            <NumberInput value={s.cooldownHours.shopping} min={0} suffix="ore" onChange={(v) => setCooldown('shopping', v)} />
-          </Row>
-          <Row title="Reflecție · Răsfăț">
-            <NumberInput value={s.cooldownHours.leisure} min={0} suffix="ore" onChange={(v) => setCooldown('leisure', v)} />
-          </Row>
-          <Row title="Reflecție · Dezvoltare">
-            <NumberInput value={s.cooldownHours.development} min={0} suffix="ore" onChange={(v) => setCooldown('development', v)} />
-          </Row>
-        </Section>
-
-        <Section title="Provocări bonus">
-          <Row title="Frecvență" desc="Șansa zilnică să apară o provocare din lista specială, la o oră aleatorie.">
-            <select className="select" style={{ width: 200 }} value={s.bonusFrequency} onChange={(e) => api.updateSettings({ bonusFrequency: e.target.value as BonusFrequency })}>
-              <option value="off">Oprite</option>
-              <option value="low">Rar (30%)</option>
-              <option value="normal">Moderat (50%)</option>
-              <option value="high">Des (75%)</option>
-              <option value="daily">Zilnic (100%)</option>
-            </select>
-          </Row>
-          <Row title="Multiplicator" desc="De câte ori se înmulțesc punctele și XP-ul la finalizarea unei provocări.">
-            <NumberInput value={s.bonusMultiplier} min={2} max={10} suffix="×" onChange={(v) => api.updateSettings({ bonusMultiplier: Math.max(2, Math.min(10, Math.round(v))) })} />
-          </Row>
-          <Row title="Timp de realizare" desc="Durata unei provocări după ce apare.">
-            <NumberInput value={s.bonusWindowHours} min={1} max={72} suffix="ore" onChange={(v) => api.updateSettings({ bonusWindowHours: Math.max(1, Math.min(72, Math.round(v))) })} />
-          </Row>
-        </Section>
-
-        <Section title="Serie">
-          <Row title="Bonus de serie" desc="+1% credite pentru fiecare zi consecutivă cu activitate, maxim +30%.">
-            <Switch checked={s.streakBonus} onChange={(v) => api.updateSettings({ streakBonus: v })} label="Bonus de serie" />
-          </Row>
-          <Row title="Zile libere" desc="În aceste zile poți lua pauză fără să pierzi seria.">
-            <div className="weekday-picker">
-              {WEEK_ORDER.map((d) => (
-                <button
-                  key={d}
-                  className={s.restDays.includes(d) ? 'on' : ''}
-                  onClick={() => api.updateSettings({ restDays: s.restDays.includes(d) ? s.restDays.filter((x) => x !== d) : [...s.restDays, d] })}
-                >
-                  {WEEKDAY_SHORT[d]}
-                </button>
-              ))}
-            </div>
-          </Row>
-        </Section>
-
-        <Section title="Date și cont">
-          <Row
-            title="Stocare"
-            desc={
-              backend.kind === 'server'
-                ? 'Date salvate pe server (MariaDB) și sincronizate între dispozitive.'
-                : 'Mod local: datele există doar în acest browser. Pornește serverul Docker pentru sincronizare.'
-            }
-          >
-            <span className={`badge ${backend.kind === 'server' ? 'badge-success' : 'badge-warning'}`}>
-              {backend.kind === 'server' ? <Cloud size={13} /> : <HardDrive size={13} />} {backend.kind === 'server' ? 'Server' : 'Local'}
-            </span>
-          </Row>
-          {backend.auth.changePassword && (
-            <Row title="Parolă" desc="Schimbarea parolei deconectează celelalte dispozitive.">
-              <button className="btn" onClick={() => setPwOpen(true)}>
-                <KeyRound size={15} /> Schimbă parola
-              </button>
-            </Row>
+              <Row title="Nume">
+                <input className="input" style={{ width: 240 }} value={c.name} onChange={(e) => api.updateCharacter({ name: e.target.value })} />
+              </Row>
+              <Row title="Culoarea ta">
+                <div className="row wrap">
+                  {AVATAR_COLORS.map((col) => (
+                    <button key={col} className={`color-swatch ${col === c.color ? 'on' : ''}`} style={{ background: col }} onClick={() => api.updateCharacter({ color: col })} aria-label={col} />
+                  ))}
+                </div>
+              </Row>
+              <Row title="Tema panourilor" desc="Lumea de pe drum urmează ora reală; tema se aplică listelor și setărilor.">
+                <div className="segmented">
+                  {(
+                    [
+                      ['system', <Monitor size={14} key="m" />, 'Sistem'],
+                      ['dark', <Moon size={14} key="d" />, 'Întunecat'],
+                      ['light', <Sun size={14} key="l" />, 'Luminos'],
+                    ] as const
+                  ).map(([v, icon, label]) => (
+                    <button key={v} className={s.theme === v ? 'active' : ''} onClick={() => api.updateSettings({ theme: v })}>
+                      <span className="row" style={{ gap: 6 }}>
+                        {icon} {label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Row>
+            </Section>
           )}
-          <Row title="Cont" desc={session.email}>
-            <button className="btn" onClick={() => logout()}>
-              <LogOut size={15} /> Deconectare
-            </button>
-          </Row>
-          <Row title="Backup" desc="Exportă un fișier JSON cu toate datele tale, sau importă unul exportat anterior.">
-            <div className="row">
-              <button className="btn" onClick={exportData}>
-                <Download size={15} /> Exportă
-              </button>
-              <button className="btn" onClick={() => fileRef.current?.click()}>
-                <Upload size={15} /> Importă
-              </button>
-              <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importData(e.target.files[0])} />
-            </div>
-          </Row>
-          <Row title="Resetare" desc="Șterge personajul, sarcinile, creditele și obiectivele.">
-            <button className="btn btn-danger" onClick={() => setConfirmReset(true)}>
-              Resetează tot
-            </button>
-          </Row>
-        </Section>
+
+          {section === 'day' && (
+            <Section title="Ziua mea" desc="Reperele cu oră și mesele care apar în fiecare zi pe drum și în desfășurător.">
+              {routine.length === 0 ? (
+                <div className="settings-empty">
+                  <Palette size={28} />
+                  <p>Încă nu ai configurat ziua. Spune-mi la ce oră te trezești, când mergi la program și când mănânci.</p>
+                  <button className="btn btn-primary" onClick={() => setRoutineOpen(true)}>
+                    Configurează ziua
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="routine-items">
+                    {routine.map((t) => (
+                      <div key={t.id} className="routine-item">
+                        <span className="routine-time num">{t.time}</span>
+                        <span className="routine-kind">{t.kind === 'meal' ? <Utensils size={15} /> : <AlarmClock size={15} />}</span>
+                        <span className="grow">
+                          <b>{t.title}</b>
+                          <small>
+                            {timeRule(t)} · {scheduleLabel(t)} · {t.points} pct
+                          </small>
+                        </span>
+                        <button className="btn btn-ghost btn-icon" onClick={() => setEditing(t)} aria-label={`Editează ${t.title}`}>
+                          <Pencil size={15} />
+                        </button>
+                        <button className="btn btn-ghost btn-icon" onClick={() => api.archiveTask(t.id, true)} aria-label={`Scoate ${t.title}`} title="Scoate de pe drum (arhivează)">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="btn mt-12" onClick={() => setRoutineOpen(true)}>
+                    <Plus size={15} /> Adaugă repere sau mese
+                  </button>
+                </>
+              )}
+            </Section>
+          )}
+
+          {section === 'nutrition' && (
+            <Section title="Nutriție" desc="Pe baza profilului calculez țintele zilnice. Seara primești un scor după cât de bine te-ai încadrat (±10% = perfect).">
+              <Row title="Ținte de nutriție" desc={s.nutrition ? 'Active' : 'Oprite — mesele se pot nota oricum, fără scor.'}>
+                <Switch checked={!!s.nutrition} onChange={(v) => api.updateSettings({ nutrition: v ? DEFAULT_NUTRITION : undefined })} label="Ținte de nutriție" />
+              </Row>
+              {s.nutrition && (
+                <div className="mt-12">
+                  <NutritionForm value={s.nutrition} onChange={(n) => api.updateSettings({ nutrition: n })} />
+                </div>
+              )}
+              {state.foods.length > 0 && (
+                <Row title="Alimentele mele" desc={`${state.foods.length} alimente salvate pentru notare rapidă.`}>
+                  <span />
+                </Row>
+              )}
+            </Section>
+          )}
+
+          {section === 'rewards' && (
+            <Section title="Recompense și serie" desc="Cât valorează munca ta și cât de iertătoare e seria.">
+              <Row title="Valoarea unui credit" desc={`Exemplu: un laptop de 6.000 lei = ${fmt(Math.ceil(6000 / s.leiPerCredit))} credite${pace > 0 ? ` ≈ ${Math.ceil(6000 / s.leiPerCredit / pace)} zile la ritmul tău` : ''}.`}>
+                <NumberInput value={s.leiPerCredit} step={0.1} min={0.1} suffix="lei" onChange={(v) => api.updateSettings({ leiPerCredit: Math.max(0.1, v) })} />
+              </Row>
+              <Row title="Timp de gândire · cumpărături" desc="Un obiectiv nou stă în reflecție înainte să poată primi credite.">
+                <NumberInput value={s.cooldownHours.shopping} min={0} suffix="ore" onChange={(v) => setCooldown('shopping', v)} />
+              </Row>
+              <Row title="Timp de gândire · răsfăț">
+                <NumberInput value={s.cooldownHours.leisure} min={0} suffix="ore" onChange={(v) => setCooldown('leisure', v)} />
+              </Row>
+              <Row title="Timp de gândire · dezvoltare" desc="Investițiile în tine pot avea 0 ore.">
+                <NumberInput value={s.cooldownHours.development} min={0} suffix="ore" onChange={(v) => setCooldown('development', v)} />
+              </Row>
+              <Row title="Bonus de serie" desc="+1% credite pentru fiecare zi la rând cu activitate (maxim +30%).">
+                <Switch checked={s.streakBonus} onChange={(v) => api.updateSettings({ streakBonus: v })} label="Bonus de serie" />
+              </Row>
+              <Row title="Scuturi de serie" desc={`La fiecare ${SHIELD_EVERY} zile active primești un scut (maxim ${MAX_SHIELDS}). O zi ratată consumă un scut în loc să rupă seria.`}>
+                <span className="badge badge-accent">automat</span>
+              </Row>
+              <Row title="Zile libere" desc="În aceste zile poți face pauză fără să pierzi seria.">
+                <div className="weekday-picker">
+                  {WEEK_ORDER.map((d) => (
+                    <button
+                      key={d}
+                      className={s.restDays.includes(d) ? 'on' : ''}
+                      onClick={() => api.updateSettings({ restDays: s.restDays.includes(d) ? s.restDays.filter((x) => x !== d) : [...s.restDays, d] })}
+                      aria-pressed={s.restDays.includes(d)}
+                    >
+                      {WEEKDAY_SHORT[d]}
+                    </button>
+                  ))}
+                </div>
+              </Row>
+            </Section>
+          )}
+
+          {section === 'bonus' && (
+            <Section title="Provocări surpriză" desc="Din când în când, pe drum apare un cufăr cu o sarcină din lista ta specială (★). Dacă o faci în timpul dat, primești puncte multiplicate.">
+              <Row title="Cât de des" desc={s.bonusFrequency === 'off' ? 'Nu apar provocări.' : `Șansă de ${Math.round(BONUS_CHANCE[s.bonusFrequency] * 100)}% pe zi, la o oră aleatorie.`}>
+                <div className="segmented">
+                  {FREQ.map((f) => (
+                    <button key={f.v} className={s.bonusFrequency === f.v ? 'active' : ''} onClick={() => api.updateSettings({ bonusFrequency: f.v })}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </Row>
+              <Row title="Multiplicator" desc="De câte ori se înmulțesc punctele și XP-ul.">
+                <div className="segmented">
+                  {[2, 3, 5, 10].map((m) => (
+                    <button key={m} className={s.bonusMultiplier === m ? 'active' : ''} onClick={() => api.updateSettings({ bonusMultiplier: m })}>
+                      ×{m}
+                    </button>
+                  ))}
+                </div>
+              </Row>
+              <Row title="Timp de realizare" desc="Cât timp ai la dispoziție după ce apare.">
+                <div className="segmented">
+                  {[6, 12, 24, 48].map((h) => (
+                    <button key={h} className={s.bonusWindowHours === h ? 'active' : ''} onClick={() => api.updateSettings({ bonusWindowHours: h })}>
+                      {h} h
+                    </button>
+                  ))}
+                </div>
+              </Row>
+              <Row title="Lista specială" desc={`${state.tasks.filter((t) => t.special && !t.archived).length} sarcini pot deveni provocări. Le marchezi cu ★ în Sarcini.`}>
+                <span />
+              </Row>
+            </Section>
+          )}
+
+          {section === 'account' && (
+            <Section title="Cont și date" desc="Unde stau datele tale și cum le păstrezi în siguranță.">
+              <Row
+                title="Stocare"
+                desc={backend.kind === 'server' ? 'Pe serverul tău (MariaDB), sincronizat între dispozitive.' : 'Doar în acest browser. Pornește serverul Docker pentru sincronizare.'}
+              >
+                <span className={`badge ${backend.kind === 'server' ? 'badge-success' : 'badge-warning'}`}>
+                  {backend.kind === 'server' ? <Cloud size={13} /> : <HardDrive size={13} />} {backend.kind === 'server' ? 'Server' : 'Local'}
+                </span>
+              </Row>
+              <Row title="Cont" desc={session.email}>
+                <button className="btn" onClick={() => logout()}>
+                  <LogOut size={15} /> Deconectare
+                </button>
+              </Row>
+              {backend.auth.changePassword && (
+                <Row title="Parolă" desc="Schimbarea parolei deconectează celelalte dispozitive.">
+                  <button className="btn" onClick={() => setPwOpen(true)}>
+                    <KeyRound size={15} /> Schimbă parola
+                  </button>
+                </Row>
+              )}
+              <Row title="Copie de siguranță" desc="Un fișier cu toate datele tale. Îl poți importa oricând.">
+                <div className="row">
+                  <button className="btn" onClick={exportData}>
+                    <Download size={15} /> Exportă
+                  </button>
+                  <button className="btn" onClick={() => fileRef.current?.click()}>
+                    <Upload size={15} /> Importă
+                  </button>
+                  <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importData(e.target.files[0])} />
+                </div>
+              </Row>
+              <Row title="Zona periculoasă" desc="Șterge personajul, sarcinile, creditele și obiectivele.">
+                <button className="btn btn-danger" onClick={() => setConfirmReset(true)}>
+                  Resetează tot
+                </button>
+              </Row>
+            </Section>
+          )}
+        </div>
       </div>
 
       {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
       {routineOpen && <RoutineSetup onClose={() => setRoutineOpen(false)} />}
+      {editing && <TaskEditor task={editing} onClose={() => setEditing(null)} />}
       {confirmReset && (
         <Modal
           size="sm"
@@ -210,27 +325,29 @@ export function SettingsView() {
                 className="btn btn-primary"
                 style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => {
+                  exportData();
                   api.replaceState(createEmptyState());
                   setConfirmReset(false);
                 }}
               >
-                Șterge definitiv
+                Exportă copia și șterge
               </button>
             </>
           }
         >
-          <p className="text-2">Acțiunea nu poate fi anulată. Exportă un backup înainte, dacă vrei să păstrezi istoricul.</p>
+          <p className="text-2">Acțiunea nu poate fi anulată. Înainte de ștergere descarc automat o copie de siguranță, ca să poți reveni.</p>
         </Modal>
       )}
     </>
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, desc, children }: { title: string; desc?: string; children: ReactNode }) {
   return (
-    <div className="card">
-      <h2 style={{ marginBottom: 6 }}>{title}</h2>
-      {children}
+    <div className="card settings-section">
+      <h2 className="display" style={{ fontSize: 22 }}>{title}</h2>
+      {desc && <p className="muted small mt-8">{desc}</p>}
+      <div className="mt-12">{children}</div>
     </div>
   );
 }

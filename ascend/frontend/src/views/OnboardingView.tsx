@@ -1,220 +1,251 @@
-import { ArrowLeft, ArrowRight, Gift, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Star } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ATTRIBUTES } from '../domain/attributes';
+import { ATTRIBUTE_MAP } from '../domain/attributes';
 import { DEFAULT_SETTINGS, scheduleLabel } from '../domain/engine';
 import { uid } from '../domain/id';
+import { DEFAULT_NUTRITION, computedTargets } from '../domain/nutrition';
 import { AVATAR_COLORS, TASK_TEMPLATES } from '../domain/templates';
-import type { Goal, Task } from '../domain/types';
+import type { Goal, NutritionProfile, Task } from '../domain/types';
 import { useApp } from '../state/store';
-import { Avatar } from '../ui/components';
-import { lei } from '../ui/format';
-import { AttrTag } from '../ui/icons';
+import { fmt, lei } from '../ui/format';
+import { AttrIcon } from '../ui/icons';
+import { DEFAULT_PLAN, DayPlanForm, planToTasks, type DayPlan } from '../world/DayPlan';
+import { Hiker } from '../world/Hiker';
+import { NutritionForm } from '../world/RoutineSetup';
 
-interface Pick {
-  on: boolean;
-  special: boolean;
-  points: number;
-}
+const STEPS = ['Tu', 'Ziua ta', 'Obiceiuri', 'Nutriție', 'Primul vârf'];
+const GOAL_IDEAS: [string, number][] = [
+  ['Laptop', 6000],
+  ['Telefon nou', 3500],
+  ['Vacanță', 4000],
+  ['Curs online', 800],
+  ['Bicicletă', 2500],
+];
 
 export function OnboardingView() {
   const { session, api } = useApp();
   const [step, setStep] = useState(0);
   const [name, setName] = useState(session.name);
   const [color, setColor] = useState(AVATAR_COLORS[0]);
-  const [picks, setPicks] = useState<Pick[]>(() =>
-    TASK_TEMPLATES.map((t, i) => ({ on: [0, 2, 4, 9, 12, 15].includes(i), special: !!t.special, points: t.points })),
-  );
-  const [rate, setRate] = useState(DEFAULT_SETTINGS.leiPerCredit);
+  const [plan, setPlan] = useState<DayPlan>(DEFAULT_PLAN);
+  const [habits, setHabits] = useState<Set<number>>(() => new Set([0, 4, 15]));
+  const [nutri, setNutri] = useState<NutritionProfile | null>(DEFAULT_NUTRITION);
   const [goalTitle, setGoalTitle] = useState('');
   const [goalPrice, setGoalPrice] = useState('');
 
-  const selected = picks.filter((p) => p.on);
-  const dailyEstimate = useMemo(
-    () =>
-      TASK_TEMPLATES.reduce((sum, t, i) => {
-        const p = picks[i];
-        if (!p.on) return sum;
-        const s = t.schedule;
-        const perWeek = s.kind === 'weekly' ? s.times : s.kind === 'daily' ? (s.days.length || 7) : 0;
-        return sum + (p.points * perWeek) / 7;
-      }, 0),
-    [picks],
-  );
+  const routine = useMemo(() => planToTasks(plan), [plan]);
+  const perDay = useMemo(() => {
+    const weekly = (t: { points: number; schedule: Task['schedule'] }) => {
+      const s = t.schedule;
+      return t.points * (s.kind === 'weekly' ? s.times : s.kind === 'daily' ? s.days.length || 7 : 0);
+    };
+    const habitPts = [...habits].reduce((sum, i) => sum + weekly(TASK_TEMPLATES[i]), 0);
+    const routinePts = routine.reduce((sum, t) => sum + weekly(t), 0);
+    return Math.round((habitPts + routinePts) / 7);
+  }, [habits, routine]);
 
-  function finish() {
+  function finish(skipGoal = false) {
     const now = new Date().toISOString();
-    const tasks: Task[] = TASK_TEMPLATES.flatMap((t, i) =>
-      picks[i].on
-        ? [{ id: uid('t'), title: t.title, points: picks[i].points, attributes: t.attributes, schedule: t.schedule, special: picks[i].special, archived: false, createdAt: now }]
-        : [],
-    );
+    const habitTasks: Task[] = [...habits].map((i) => {
+      const t = TASK_TEMPLATES[i];
+      return { id: uid('t'), title: t.title, points: t.points, attributes: t.attributes, schedule: t.schedule, special: !!t.special, archived: false, createdAt: now };
+    });
     const price = Number(goalPrice);
     const goals: Goal[] =
-      goalTitle.trim() && price > 0
-        ? [{ id: uid('g'), title: goalTitle.trim(), mode: 'shopping', price, saved: 0, status: 'reflecting', createdAt: now, activatesAt: new Date(Date.now() + DEFAULT_SETTINGS.cooldownHours.shopping * 3_600_000).toISOString() }]
+      !skipGoal && goalTitle.trim() && price > 0
+        ? [
+            {
+              id: uid('g'),
+              title: goalTitle.trim(),
+              mode: 'shopping',
+              price,
+              saved: 0,
+              status: 'reflecting',
+              createdAt: now,
+              activatesAt: new Date(Date.now() + DEFAULT_SETTINGS.cooldownHours.shopping * 3_600_000).toISOString(),
+            },
+          ]
         : [];
-    api.onboard({ name: name.trim() || session.name, color, createdAt: now }, tasks, goals, { leiPerCredit: rate });
+    api.onboard({ name: name.trim() || session.name, color, createdAt: now }, [...routine, ...habitTasks], goals, nutri ? { nutrition: nutri } : {});
   }
 
-  const set = (i: number, patch: Partial<Pick>) => setPicks((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const optional = step === 3 || step === 4;
+  const next = () => (step < STEPS.length - 1 ? setStep(step + 1) : finish(false));
 
   return (
-    <div className="onboard">
-      <div className="steps">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className={i <= step ? 'on' : ''} />
-        ))}
-      </div>
+    <div className="onb">
+      <div className="onb-inner">
+        <div className="onb-progress">
+          {STEPS.map((s, i) => (
+            <button key={s} className={`onb-step ${i === step ? 'on' : ''} ${i < step ? 'done' : ''}`} onClick={() => i < step && setStep(i)} disabled={i > step}>
+              <span className="onb-dot">{i < step ? <Check size={12} strokeWidth={3} /> : i + 1}</span>
+              <span className="onb-step-label">{s}</span>
+            </button>
+          ))}
+        </div>
 
-      {step === 0 && (
-        <div className="col" style={{ gap: 24 }}>
-          <div>
-            <p className="muted small">Pasul 1 din 3</p>
-            <h1 className="mt-8">Creează-ți personajul</h1>
-            <p className="muted mt-8">Personajul te reprezintă: crește în nivel pe măsură ce lucrezi la tine.</p>
-          </div>
-          <div className="card row gap-16">
-            <Avatar name={name || '?'} color={color} size="lg" />
-            <div className="grow col" style={{ gap: 12 }}>
-              <div className="field">
-                <label>Nume afișat</label>
-                <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+        {step === 0 && (
+          <section className="onb-section">
+            <h1>Acesta ești tu.</h1>
+            <p className="onb-lead">Fiecare zi e un drum. Ce faci, pui în rucsac: credite pentru lucrurile pe care ți le dorești și niveluri pentru cine vrei să devii.</p>
+            <div className="onb-hero-preview" style={{ ['--c' as string]: color }}>
+              <div className="onb-road" />
+              <div className="onb-hiker">
+                <Hiker color={color} walking bag={3} bump={0} />
               </div>
-              <div className="row">
+              <span className="onb-name">{name || '…'}</span>
+            </div>
+            <div className="field mt-16">
+              <label>Cum te cheamă?</label>
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoFocus />
+            </div>
+            <div className="field mt-12">
+              <label>Culoarea ta</label>
+              <div className="row wrap">
                 {AVATAR_COLORS.map((c) => (
-                  <button key={c} className={`color-swatch ${c === color ? 'on' : ''}`} style={{ background: c }} onClick={() => setColor(c)} aria-label={`Culoare ${c}`} />
+                  <button key={c} className={`color-swatch lg ${c === color ? 'on' : ''}`} style={{ background: c }} onClick={() => setColor(c)} aria-label={`Culoare ${c}`} />
                 ))}
               </div>
             </div>
-          </div>
-          <div className="card">
-            <h2>Cele 8 atribute</h2>
-            <p className="muted small mt-8">Fiecare sarcină dă XP unuia sau mai multor atribute. Nivelul general al personajului este suma lor.</p>
-            <div className="grid grid-2 mt-16" style={{ gap: 10 }}>
-              {ATTRIBUTES.map((a) => (
-                <div key={a.key} className="col" style={{ gap: 2 }}>
-                  <AttrTag attr={a.key} />
-                  <span className="muted small">{a.description}</span>
-                </div>
+          </section>
+        )}
+
+        {step === 1 && (
+          <section className="onb-section">
+            <h1>Cum arată ziua ta?</h1>
+            <p className="onb-lead">Reperele fixe apar în fiecare zi pe drum. Le poți schimba oricând.</p>
+            <DayPlanForm value={plan} onChange={setPlan} />
+          </section>
+        )}
+
+        {step === 2 && (
+          <section className="onb-section">
+            <h1>Ce obiceiuri construiești?</h1>
+            <p className="onb-lead">
+              Începe cu 3–5. Cele cu <Star size={13} style={{ verticalAlign: -2 }} /> pot apărea ca provocări surpriză cu puncte ×5.
+            </p>
+            <div className="habit-grid">
+              {TASK_TEMPLATES.map((t, i) => {
+                const on = habits.has(i);
+                const a = ATTRIBUTE_MAP[t.attributes[0]];
+                return (
+                  <button
+                    key={t.title}
+                    className={`habit-card ${on ? 'on' : ''}`}
+                    style={{ ['--c' as string]: a.color }}
+                    onClick={() => setHabits((h) => {
+                      const n = new Set(h);
+                      if (n.has(i)) n.delete(i);
+                      else n.add(i);
+                      return n;
+                    })}
+                    aria-pressed={on}
+                  >
+                    <span className="habit-icon">
+                      <AttrIcon attr={t.attributes[0]} size={18} />
+                    </span>
+                    <span className="grow" style={{ textAlign: 'left' }}>
+                      <b>{t.title}</b>
+                      <small>
+                        {scheduleLabel({ schedule: t.schedule } as Task)} · {a.label}
+                        {t.special ? ' · ★' : ''}
+                      </small>
+                    </span>
+                    <span className="habit-pts">+{t.points}</span>
+                    <span className="habit-check">{on && <Check size={14} strokeWidth={3} />}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {step === 3 && (
+          <section className="onb-section">
+            <h1>Vrei ținte de nutriție?</h1>
+            <p className="onb-lead">Calculez câte calorii, proteine, carbohidrați și grăsimi îți trebuie. Seara primești un scor după cât de bine te-ai încadrat.</p>
+            {nutri ? (
+              <>
+                <NutritionForm value={nutri} onChange={setNutri} />
+                <p className="small mt-12">
+                  Ținta ta: <b className="num">{fmt(computedTargets(nutri).kcal)} kcal</b> pe zi.
+                </p>
+              </>
+            ) : (
+              <button className="btn" onClick={() => setNutri(DEFAULT_NUTRITION)}>
+                Vreau totuși ținte de nutriție
+              </button>
+            )}
+          </section>
+        )}
+
+        {step === 4 && (
+          <section className="onb-section">
+            <h1>Primul tău vârf</h1>
+            <p className="onb-lead">Ce ți-ai dori să cumperi din munca ta? Va sta 48 de ore „în reflecție” înainte să poți strânge credite pentru el — ca să fie o decizie, nu un impuls.</p>
+            <div className="row wrap">
+              {GOAL_IDEAS.map(([t, p]) => (
+                <button key={t} className={`chip ${goalTitle === t ? 'on' : ''}`} onClick={() => (setGoalTitle(t), setGoalPrice(String(p)))}>
+                  {t}
+                </button>
               ))}
             </div>
-          </div>
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn btn-primary" onClick={() => setStep(1)} disabled={!name.trim()}>
-              Continuă <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 1 && (
-        <div className="col" style={{ gap: 20 }}>
-          <div>
-            <p className="muted small">Pasul 2 din 3</p>
-            <h1 className="mt-8">Alege primele sarcini</h1>
-            <p className="muted mt-8">
-              Poți modifica totul oricând. Marchează cu <Star size={13} style={{ verticalAlign: -2 }} /> sarcinile pe care le poți face oricând: ele intră în
-              <strong> lista specială</strong> și pot apărea aleatoriu ca provocări de 24h cu puncte ×5.
-            </p>
-          </div>
-          <div className="card card-flush">
-            {TASK_TEMPLATES.map((t, i) => (
-              <div key={t.title} className="template-row">
-                <input type="checkbox" checked={picks[i].on} onChange={(e) => set(i, { on: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                <div className="grow">
-                  <div className="task-title">{t.title}</div>
-                  <div className="task-meta">
-                    <span>{scheduleLabel({ schedule: t.schedule } as Task)}</span>
-                    {t.attributes.map((a) => (
-                      <AttrTag key={a} attr={a} />
-                    ))}
-                  </div>
-                </div>
-                <button
-                  className={`btn btn-ghost btn-icon ${picks[i].special ? '' : 'muted'}`}
-                  title="Lista specială (provocări ×5)"
-                  onClick={() => set(i, { special: !picks[i].special, on: true })}
-                  style={{ color: picks[i].special ? 'var(--gold)' : undefined }}
-                >
-                  <Star size={16} fill={picks[i].special ? 'currentColor' : 'none'} />
-                </button>
-                <div className="input-suffix" style={{ width: 92 }}>
-                  <input className="input num" type="number" min={1} max={500} value={picks[i].points} onChange={(e) => set(i, { points: Math.max(1, Number(e.target.value) || 1) })} />
-                  <span>pct</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="row-between">
-            <button className="btn btn-ghost" onClick={() => setStep(0)}>
-              <ArrowLeft size={16} /> Înapoi
-            </button>
-            <div className="row">
-              <span className="muted small">{selected.length} sarcini · ~{Math.round(dailyEstimate)} puncte/zi</span>
-              <button className="btn btn-primary" onClick={() => setStep(2)} disabled={selected.length === 0}>
-                Continuă <ArrowRight size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="col" style={{ gap: 20 }}>
-          <div>
-            <p className="muted small">Pasul 3 din 3</p>
-            <h1 className="mt-8">Economia ta</h1>
-            <p className="muted mt-8">Punctele devin credite. Stabilește cât valorează un credit în lei.</p>
-          </div>
-          <div className="card col" style={{ gap: 16 }}>
-            <div className="field">
-              <label>Valoarea unui credit</label>
-              <div className="input-suffix" style={{ maxWidth: 200 }}>
-                <input className="input num" type="number" min={0.1} step={0.1} value={rate} onChange={(e) => setRate(Math.max(0.1, Number(e.target.value) || 1))} />
-                <span>lei</span>
-              </div>
-              <span className="hint">
-                La ritmul estimat (~{Math.round(dailyEstimate)} credite/zi) strângi aproximativ {lei(dailyEstimate * 30 * rate)} pe lună.
-              </span>
-            </div>
-            <div className="divider" />
-            <div>
-              <h2>Primul obiectiv (opțional)</h2>
-              <p className="muted small mt-8">Ceva ce îți dorești să cumperi. Va intra 48h în reflecție înainte să poți aloca credite.</p>
-            </div>
-            <div className="grid grid-2">
+            <div className="grid grid-2 mt-16">
               <div className="field">
                 <label>Ce îți dorești?</label>
                 <input className="input" placeholder="ex. Laptop nou" value={goalTitle} onChange={(e) => setGoalTitle(e.target.value)} />
               </div>
               <div className="field">
-                <label>Preț</label>
+                <label>Cât costă?</label>
                 <div className="input-suffix">
                   <input className="input num" type="number" min={1} placeholder="6000" value={goalPrice} onChange={(e) => setGoalPrice(e.target.value)} />
                   <span>lei</span>
                 </div>
               </div>
             </div>
-            {Number(goalPrice) > 0 && dailyEstimate > 0 && (
-              <div className="notice notice-gold">
-                <Gift size={16} />
+            {Number(goalPrice) > 0 && perDay > 0 && (
+              <div className="onb-estimate">
+                <span className="display num">{Math.ceil(Number(goalPrice) / perDay)}</span>
                 <span>
-                  {lei(Number(goalPrice))} = {Math.ceil(Number(goalPrice) / rate).toLocaleString('ro-RO')} credite ≈{' '}
-                  <strong>{Math.ceil(Number(goalPrice) / rate / dailyEstimate)} zile</strong> de muncă la ritmul estimat.
+                  zile de muncă pentru {lei(Number(goalPrice))}
+                  <small>la ritmul estimat de ~{perDay} credite pe zi (1 credit = 1 leu)</small>
                 </span>
               </div>
             )}
-          </div>
-          <div className="row-between">
-            <button className="btn btn-ghost" onClick={() => setStep(1)}>
+          </section>
+        )}
+
+        <div className="onb-actions">
+          {step > 0 ? (
+            <button className="btn btn-ghost" onClick={() => setStep(step - 1)}>
               <ArrowLeft size={16} /> Înapoi
             </button>
-            <button className="btn btn-primary" onClick={finish}>
-              Începe <ArrowRight size={16} />
+          ) : (
+            <span />
+          )}
+          <div className="row">
+            {optional && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  if (step === 3) {
+                    setNutri(null);
+                    setStep(4);
+                  } else finish(true);
+                }}
+              >
+                Sari peste
+              </button>
+            )}
+            <button className="btn btn-primary onb-next" onClick={next} disabled={(step === 0 && !name.trim()) || (step === 2 && habits.size === 0)}>
+              {step === STEPS.length - 1 ? 'Pornește la drum' : 'Continuă'} <ArrowRight size={16} />
             </button>
           </div>
         </div>
-      )}
+        <p className="onb-foot muted tiny">
+          {routine.length} repere + {habits.size} obiceiuri · ~{perDay} credite pe zi
+        </p>
+      </div>
     </div>
   );
 }

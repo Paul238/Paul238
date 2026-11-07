@@ -1,8 +1,8 @@
 import { Check, Lock, Pencil, Plus, Search, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
-import { activeBonus, previewReward, scheduleLabel, weekCount } from '../domain/engine';
-import { FOOD_DB, dayTotals, evaluateTime, hhmmOf, nutritionScore, scaleFood, sumFoods, targetsFor } from '../domain/nutrition';
+import { activeBonus, previousMeal, previewReward, recentFoods, scheduleLabel, tasksForDay, weekCount } from '../domain/engine';
+import { FOOD_DB, dayTotals, evaluateTime, fromMinutes, hhmmOf, nutritionScore, scaleFood, sumFoods, targetsFor, toMinutes } from '../domain/nutrition';
 import type { AttributeKey, MacroTargets, Task } from '../domain/types';
 import { useApp } from '../state/store';
 import { Burst } from '../ui/Art';
@@ -64,8 +64,13 @@ export function TaskSheet({ taskId, onClose, onEdit }: { taskId: string; onClose
 
   function complete() {
     setBurst(true);
-    api.completeTask(task!.id);
-    notify({ kind: isBonus ? 'bonus' : 'success', title: `+${reward.credits} credite`, body: isBonus ? 'Provocare cucerită!' : 'În rucsac!' });
+    const cid = api.completeTask(task!.id);
+    notify({
+      kind: isBonus ? 'bonus' : 'success',
+      title: `+${reward.credits} credite`,
+      body: isBonus ? 'Provocare cucerită!' : `${task!.title} · în rucsac`,
+      action: { label: 'Anulează', run: () => api.undoCompletion(cid) },
+    });
     setTimeout(onClose, 700);
   }
 
@@ -184,6 +189,19 @@ export function TimeSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               <input type="time" value={value} onChange={(e) => setValue(e.target.value || value)} className="num" />
             </label>
           </div>
+          <div className="row wrap mt-12" style={{ gap: 6 }}>
+            <button className="chip" onClick={() => setValue(hhmmOf(new Date().toISOString()))}>
+              Acum
+            </button>
+            {[-15, -5, 5, 15].map((d) => (
+              <button key={d} className="chip num" onClick={() => setValue(fromMinutes(toMinutes(value) + d))}>
+                {d > 0 ? `+${d}` : `−${-d}`} min
+              </button>
+            ))}
+            <button className="chip" onClick={() => setValue(task.time!)}>
+              Fix la țintă
+            </button>
+          </div>
           <div className={`time-preview ${preview.success ? 'ok' : 'bad'}`}>
             {preview.success
               ? `${mode === 'log' ? 'Se notează' : 'La timp'} · +${previewReward(state, task, new Date().toISOString()).credits} credite`
@@ -193,8 +211,13 @@ export function TimeSheet({ taskId, onClose }: { taskId: string; onClose: () => 
             <button
               className="btn btn-block btn-primary sheet-cta"
               onClick={() => {
-                api.completeTask(task.id, value);
-                notify({ kind: preview.success ? 'success' : 'info', title: preview.success ? 'Reper respectat' : 'Reper notat', body: `${task.title} · ${value}` });
+                const cid = api.completeTask(task.id, value);
+                notify({
+                  kind: preview.success ? 'success' : 'info',
+                  title: preview.success ? 'Reper respectat' : 'Reper notat',
+                  body: `${task.title} · ${value}`,
+                  action: { label: 'Anulează', run: () => api.undoCompletion(cid) },
+                });
                 setTimeout(onClose, 500);
               }}
             >
@@ -262,6 +285,8 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
   const foods = log?.foods ?? [];
   const closed = !!state.days[today];
   const profile = state.settings.nutrition;
+  const recents = useMemo(() => recentFoods(state, 8), [state]);
+  const prev = useMemo(() => previousMeal(state, taskId, today), [state, taskId, today]);
 
   const [q, setQ] = useState('');
   const [pick, setPick] = useState<Pick | null>(null);
@@ -347,7 +372,32 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
         <div className="food-add">
           {!pick ? (
             <>
-              <div className="input-icon">
+              {prev && foods.length === 0 && (
+                <button
+                  className="repeat-meal"
+                  onClick={() => prev.foods.forEach(({ id: _id, ...f }) => api.addFood(today, taskId, f))}
+                >
+                  <span className="grow" style={{ textAlign: 'left' }}>
+                    <b>Repetă {task.title.toLowerCase()} din {prev.date.split('-').reverse().slice(0, 2).join('.')}</b>
+                    <small>{prev.foods.map((f) => f.name).join(', ')}</small>
+                  </span>
+                  <span className="num strong">{fmt(sumFoods(prev.foods).kcal)} kcal</span>
+                </button>
+              )}
+              {recents.length > 0 && !q && (
+                <div className="recent-foods">
+                  <span className="eyebrow-label">Recente · o atingere</span>
+                  <div className="row wrap mt-8" style={{ gap: 6 }}>
+                    {recents.map((r) => (
+                      <button key={r.name} className="chip recent-chip" onClick={() => api.addFood(today, taskId, { name: r.name, grams: r.grams, kcal: r.kcal, protein: r.protein, carbs: r.carbs, fat: r.fat })}>
+                        <Plus size={12} /> {r.name}
+                        <span className="muted">{r.grams ? ` ${fmt(r.grams)} g` : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="input-icon mt-12">
                 <Search size={15} />
                 <input className="input" placeholder="Caută un aliment (ex. ou, orez, pui)…" value={q} onChange={(e) => setQ(e.target.value)} />
               </div>
@@ -358,7 +408,8 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
                     className="food-option"
                     onClick={() => {
                       setPick(o);
-                      setAmount(o.per === 'portion' ? '1' : String(o.unit?.grams ?? 100));
+                      const last = recents.find((r) => r.name.toLowerCase() === o.name.toLowerCase());
+                      setAmount(o.per === 'portion' ? '1' : String(last?.grams ?? o.unit?.grams ?? 100));
                     }}
                   >
                     <span className="grow" style={{ textAlign: 'left' }}>
@@ -459,8 +510,8 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
             className="btn btn-block btn-primary sheet-cta"
             disabled={foods.length === 0 || closed}
             onClick={() => {
-              api.completeTask(task.id);
-              notify({ kind: 'success', title: `${task.title} notat`, body: `${fmt(mealTotals.kcal)} kcal în rucsac.` });
+              const cid = api.completeTask(task.id);
+              notify({ kind: 'success', title: `${task.title} notat`, body: `${fmt(mealTotals.kcal)} kcal în rucsac.`, action: { label: 'Anulează', run: () => api.undoCompletion(cid) } });
               setTimeout(onClose, 500);
             }}
           >
@@ -561,6 +612,104 @@ export function BonusSheet({ onClose }: { onClose: () => void }) {
         <BonusCard bonus={bonus} />
       </div>
       <p className="muted small mt-12">Etapa strălucește acum auriu pe drum. O poți bifa de acolo sau de aici.</p>
+    </Sheet>
+  );
+}
+
+/* ---------------- rezumatul zilei (tabăra de seară) ---------------- */
+
+export function RecapSheet({ onClose, onNutrition }: { onClose: () => void; onNutrition: () => void }) {
+  const { state, api, today, derived } = useApp();
+  const todays = state.completions.filter((c) => c.date === today);
+  const closed = state.days[today];
+  const profile = state.settings.nutrition;
+  const totals = dayTotals(state, today);
+  const hasMeals = state.meals.some((m) => m.date === today && m.foods.length);
+  const nScore = profile && hasMeals ? nutritionScore(totals, targetsFor(profile)).score : null;
+  const credits = todays.reduce((s, c) => s + c.credits, 0) + (closed?.nutrition?.credits ?? 0);
+  const xp: Partial<Record<AttributeKey, number>> = {};
+  for (const c of todays) for (const [k, v] of Object.entries(c.xp)) xp[k as AttributeKey] = (xp[k as AttributeKey] ?? 0) + (v ?? 0);
+  const checks = todays.filter((c) => c.value);
+  const left = tasksForDay(state, today).filter((i) => !i.completion).length;
+  const dateLabel = new Date().toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  return (
+    <Sheet onClose={onClose} accent="#ff9a4d">
+      <div className="sheet-eyebrow">Tabăra de seară · {dateLabel}</div>
+      <h2 className="sheet-title">Rezumatul zilei</h2>
+      <div className="recap-stats">
+        <div>
+          <span className="recap-big num">{todays.length}</span>
+          <small>etape în rucsac</small>
+        </div>
+        <div>
+          <span className="recap-big num gold">+{fmt(credits)}</span>
+          <small>credite azi</small>
+        </div>
+        <div>
+          <span className="recap-big num">{derived.streak.days}</span>
+          <small>
+            zile la rând{derived.streak.shields ? ` · 🛡 ${derived.streak.shields}` : ''}
+          </small>
+        </div>
+      </div>
+
+      {Object.keys(xp).length > 0 && (
+        <>
+          <div className="eyebrow-label mt-16">Ai crescut azi</div>
+          <div className="row wrap mt-8" style={{ gap: 6 }}>
+            {Object.entries(xp).map(([k, v]) => (
+              <span key={k} className="xp-chip" style={{ ['--c' as string]: ATTRIBUTE_MAP[k as AttributeKey].color }}>
+                +{v} XP {ATTRIBUTE_MAP[k as AttributeKey].label}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
+      {checks.length > 0 && (
+        <>
+          <div className="eyebrow-label mt-16">Reperele zilei</div>
+          <div className="food-list">
+            {checks.map((c) => (
+              <div key={c.id} className="food-row">
+                <span className={`dot-state ${c.success ? 'on' : ''}`} style={{ ['--c' as string]: c.success ? 'var(--success)' : 'var(--danger)' }} />
+                <span className="grow strong small">{c.taskTitle}</span>
+                <span className="num small">{c.value}</span>
+                <span className={`badge ${c.success ? 'badge-success' : 'badge-danger'}`}>{c.success ? 'la timp' : 'ratat'}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {profile && (
+        <div className="recap-nutri" onClick={onNutrition} role="button" tabIndex={0}>
+          <div>
+            <div className="eyebrow-label">Nutriție</div>
+            <div className="small mt-8">
+              {hasMeals ? `${fmt(totals.kcal)} / ${fmt(targetsFor(profile).kcal)} kcal` : 'Nicio masă notată azi'}
+            </div>
+          </div>
+          {nScore !== null && <span className="recap-big num">{Math.round((closed?.nutrition?.score ?? nScore) * 100)}%</span>}
+        </div>
+      )}
+
+      <p className="muted small mt-16">
+        {left > 0 ? `${left} etape rămân pentru altă zi — e în regulă. Mâine drumul începe din nou de acasă.` : 'Ai strâns tot ce ți-ai propus azi. Odihnește-te bine.'}
+      </p>
+
+      <div className="sheet-actions">
+        {!closed && profile && hasMeals ? (
+          <button className="btn btn-block btn-primary sheet-cta" onClick={() => api.closeDay(today)}>
+            {Math.round(profile.points * (nScore ?? 0)) > 0 ? `Încheie ziua · +${Math.round(profile.points * (nScore ?? 0))} credite nutriție` : 'Încheie ziua'}
+          </button>
+        ) : (
+          <button className="btn btn-block sheet-cta" onClick={onClose}>
+            Noapte bună
+          </button>
+        )}
+      </div>
     </Sheet>
   );
 }

@@ -1,0 +1,40 @@
+name: Ascend CI
+
+on:
+  push:
+    paths: ['ascend/**', '.github/workflows/ascend-ci.yml']
+  pull_request:
+    paths: ['ascend/**', '.github/workflows/ascend-ci.yml']
+
+jobs:
+  frontend:
+    name: Interfață (tipuri, teste, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ascend/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ascend/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run check
+
+  api:
+    name: Server (PHP lint, Docker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ascend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+      - name: Sintaxa PHP
+        run: find api -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Configurația Docker Compose
+        run: cp .env.example .env && docker compose config -q

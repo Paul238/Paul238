@@ -202,6 +202,18 @@ export function Toasts({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id:
               <div className="t">{t.title}</div>
               {t.body && <div className="b">{t.body}</div>}
             </div>
+            {t.action && (
+              <button
+                className="toast-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  t.action!.run();
+                  onDismiss(t.id);
+                }}
+              >
+                {t.action.label}
+              </button>
+            )}
           </div>
         );
       })}

@@ -169,47 +169,94 @@ function activeDays(state: AppState): Set<DateKey> {
 }
 
 /** câte zile consecutive cu activitate se termină la data `end` (zilele libere nu rup seria) */
-export function streakEndingAt(state: AppState, end: DateKey): number {
+/** câte zile active consecutive sunt necesare pentru a câștiga un scut de serie */
+export const SHIELD_EVERY = 7;
+export const MAX_SHIELDS = 2;
+
+export interface StreakInfo {
+  days: number;
+  /** scuturi disponibile: o zi ratată consumă un scut în loc să rupă seria */
+  shields: number;
+  best: number;
+  /** zilele salvate de scuturi */
+  saved: DateKey[];
+}
+
+/**
+ * Simulează seria de la crearea contului până la `end`.
+ * Zilele libere nu contează; o zi ratată consumă un scut (dacă există) în loc să rupă seria.
+ * Se câștigă un scut la fiecare SHIELD_EVERY zile active (maxim MAX_SHIELDS).
+ */
+export function streakInfo(state: AppState, end: DateKey): StreakInfo {
   const days = activeDays(state);
-  const start = state.character ? keyOf(state.character.createdAt) : '0000-00-00';
-  let count = 0;
-  let d = end;
-  for (let i = 0; i < 3660 && d >= start; i++) {
-    if (days.has(d)) count++;
-    else if (!state.settings.restDays.includes(weekday(d))) break;
-    d = addDays(d, -1);
+  const first = [...days].sort()[0];
+  const created = state.character ? keyOf(state.character.createdAt) : first;
+  const start = first && created && first < created ? first : created;
+  const out: StreakInfo = { days: 0, shields: 0, best: 0, saved: [] };
+  if (!start || start > end) return out;
+  let since = 0;
+  for (let d = start, i = 0; d <= end && i < 4000; d = addDays(d, 1), i++) {
+    if (days.has(d)) {
+      out.days++;
+      since++;
+      if (since >= SHIELD_EVERY) {
+        since = 0;
+        out.shields = Math.min(MAX_SHIELDS, out.shields + 1);
+      }
+    } else if (state.settings.restDays.includes(weekday(d))) {
+      continue;
+    } else if (out.shields > 0 && out.days > 0) {
+      out.shields--;
+      out.saved.push(d);
+    } else {
+      out.days = 0;
+      since = 0;
+    }
+    out.best = Math.max(out.best, out.days);
   }
-  return count;
+  return out;
+}
+
+export function streakEndingAt(state: AppState, end: DateKey): number {
+  return streakInfo(state, end).days;
 }
 
 /** seria curentă: dacă azi nu ai bifat încă nimic, seria de ieri este încă vie */
-export function currentStreak(state: AppState, today: DateKey): { days: number; activeToday: boolean } {
+export function currentStreak(state: AppState, today: DateKey): { days: number; activeToday: boolean; shields: number } {
   const activeToday = state.completions.some((c) => c.date === today);
-  return { days: activeToday ? streakEndingAt(state, today) : streakEndingAt(state, addDays(today, -1)), activeToday };
+  const info = streakInfo(state, activeToday ? today : addDays(today, -1));
+  return { days: info.days, activeToday, shields: info.shields };
 }
 
 export function longestStreak(state: AppState): number {
-  const days = [...activeDays(state)].sort();
-  if (days.length === 0) return 0;
-  let best = 0;
-  let run = 0;
-  let prev: DateKey | null = null;
-  for (const d of days) {
-    if (prev) {
-      // verifică dacă zilele dintre prev și d sunt toate libere
-      let gapOk = true;
-      for (let x = addDays(prev, 1); x < d; x = addDays(x, 1)) {
-        if (!state.settings.restDays.includes(weekday(x))) {
-          gapOk = false;
-          break;
-        }
-      }
-      run = gapOk ? run + 1 : 1;
-    } else run = 1;
-    best = Math.max(best, run);
-    prev = d;
+  const last = [...activeDays(state)].sort().pop();
+  return last ? streakInfo(state, last).best : 0;
+}
+
+/* ---------- alimente: scurtături pentru notare ---------- */
+
+/** ultimele alimente folosite (unice după nume), cu ultima cantitate */
+export function recentFoods(state: AppState, limit = 8): FoodEntry[] {
+  const seen = new Set<string>();
+  const out: FoodEntry[] = [];
+  const logs = [...state.meals].sort((a, b) => (a.date < b.date ? 1 : -1));
+  for (const m of logs) {
+    for (const f of [...m.foods].reverse()) {
+      const k = f.name.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(f);
+      if (out.length >= limit) return out;
+    }
   }
-  return best;
+  return out;
+}
+
+/** ultima dată (înainte de `date`) când ai notat masa respectivă */
+export function previousMeal(state: AppState, taskId: string, date: DateKey) {
+  return [...state.meals]
+    .filter((m) => m.taskId === taskId && m.date < date && m.foods.length > 0)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
 }
 
 export function streakMultiplierFor(streakDays: number, enabled: boolean): number {

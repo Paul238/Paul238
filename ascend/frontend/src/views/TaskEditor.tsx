@@ -1,4 +1,4 @@
-import { Star, Trash2 } from 'lucide-react';
+import { ChevronDown, Star, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
 import { WEEKDAY_SHORT, WEEK_ORDER } from '../domain/dates';
@@ -30,7 +30,15 @@ export function TaskEditor({
   const [title, setTitle] = useState(task?.title ?? '');
   const [notes, setNotes] = useState(task?.notes ?? '');
   const [points, setPoints] = useState(task?.points ?? 15);
-  const [attributes, setAttributes] = useState<AttributeKey[]>(task?.attributes ?? defaultAttributes);
+  const [attributes, setAttributesRaw] = useState<AttributeKey[]>(task?.attributes ?? defaultAttributes);
+  const [attrTouched, setAttrTouched] = useState(!!task || defaultAttributes.length > 0);
+  const [suggested, setSuggested] = useState(false);
+  const [more, setMore] = useState(!!task?.notes || !!task?.special);
+  const setAttributes = (v: AttributeKey[]) => {
+    setAttrTouched(true);
+    setSuggested(false);
+    setAttributesRaw(v);
+  };
   const [schedule, setSchedule] = useState<Schedule>(task?.schedule ?? { kind: 'daily', days: [] });
   const [special, setSpecial] = useState(task?.special ?? defaultSpecial);
   const [kind, setKind] = useState<TaskKind>(task?.kind ?? 'task');
@@ -86,6 +94,18 @@ export function TaskEditor({
       }
     >
       <div className="field">
+        <label>Titlu</label>
+        <input className="input" autoFocus value={title} onChange={(e) => {
+            setTitle(e.target.value);
+            if (!attrTouched) {
+              const sug = suggestAttributes(e.target.value);
+              setAttributesRaw(sug);
+              setSuggested(sug.length > 0);
+            }
+          }} placeholder="ex. Citit 30 de minute" maxLength={80} onKeyDown={(e) => e.key === 'Enter' && save()} />
+      </div>
+
+      <div className="field">
         <label>Tip de etapă</label>
         <div className="segmented full">
           <button type="button" className={kind === 'task' ? 'active' : ''} onClick={() => setKind('task')}>
@@ -136,13 +156,9 @@ export function TaskEditor({
       </div>
 
       <div className="field">
-        <label>Titlu</label>
-        <input className="input" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex. Citit 30 de minute" maxLength={80} onKeyDown={(e) => e.key === 'Enter' && save()} />
-      </div>
-
-      <div className="field">
         <label>Atribute dezvoltate</label>
         <AttributeChips value={attributes} onChange={setAttributes} />
+        {suggested && <span className="hint">Sugerat după titlu — poți schimba.</span>}
         <span className="hint">Primul atribut ales primește 100% XP, celelalte 50%. Maxim 3.</span>
       </div>
 
@@ -215,6 +231,11 @@ export function TaskEditor({
         )}
       </div>
 
+      <button type="button" className="plan-adv-toggle" onClick={() => setMore(!more)} aria-expanded={more}>
+        <ChevronDown size={15} style={{ transform: more ? 'rotate(180deg)' : undefined, transition: 'transform .2s' }} /> Mai multe opțiuni
+      </button>
+      {more && (
+        <>
       {kind === 'task' && (
       <div className="card" style={{ padding: 14, background: 'var(--surface-2)' }}>
         <div className="row-between">
@@ -237,6 +258,9 @@ export function TaskEditor({
         <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Detalii, criteriu de reușită…" />
       </div>
 
+        </>
+      )}
+
       <div className="row wrap small muted" style={{ gap: 14 }}>
         <span>
           Recompensă: <strong className="text-2">+{points} credite</strong>
@@ -250,4 +274,20 @@ export function TaskEditor({
       </div>
     </Modal>
   );
+}
+
+/** sugerează atribute din cuvintele titlului */
+const KEYWORDS: [AttributeKey, RegExp][] = [
+  ['health', /(sal[aă]|sport|alerg|antren|yoga|[iî]not|pa[sș]i|plimb|bicicl|somn|ap[aă]|fitness|stretch|vitamin)/i],
+  ['intellect', /(citit|carte|curs|[iî]nv[aă][tț]|studi|limb[aă]|lec[tț]i|podcast|document)/i],
+  ['creativity', /(desen|muzic|scris|chitar|pian|foto|creativ|pict|jurnal|compun)/i],
+  ['discipline', /(medita|trezi|telefon|social media|f[aă]r[aă]|rutin|focus|concentr|du[sș] rece)/i],
+  ['finance', /(buget|cheltu|econom|invest|bani|factur|economi)/i],
+  ['social', /(prieten|famil|sun|mama|tata|[iî]nt[aâ]lnire|copii|partener|vizit)/i],
+  ['order', /(cur[aă][tț]en|g[aă]tit|cas[aă]|vase|rufe|organiz|ordine|cump[aă]r[aă]turi)/i],
+  ['career', /(proiect|munc|cv|certific|program|cod|client|raport|birou|carier)/i],
+];
+
+export function suggestAttributes(title: string): AttributeKey[] {
+  return KEYWORDS.filter(([, re]) => re.test(title)).map(([k]) => k).slice(0, 2);
 }

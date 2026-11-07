@@ -207,3 +207,19 @@ describe('obiective', () => {
     expect(goalRequiredCredits({ price: 6000 } as never, { ...s.settings, leiPerCredit: 2 })).toBe(3000);
   });
 });
+
+describe('scuturi de serie', () => {
+  it('după 7 zile active, o zi ratată nu rupe seria', () => {
+    let s = setup([task('a')]);
+    for (let i = 0; i < 7; i++) s = reducer(s, complete('a', at(i)));
+    // ziua 7 ratată, ziua 8 activă
+    s = reducer(s, complete('a', at(8)));
+    expect(currentStreak(s, '2026-11-10').days).toBe(8);
+    expect(currentStreak(s, '2026-11-10').shields).toBe(0);
+  });
+
+  it('fără scut, o zi ratată resetează seria', () => {
+    const s = run(setup([task('a')]), complete('a', at(0)), complete('a', at(1)), complete('a', at(3)));
+    expect(currentStreak(s, '2026-11-05').days).toBe(1);
+  });
+});

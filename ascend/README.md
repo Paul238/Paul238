@@ -67,6 +67,13 @@ Dacă nu se încarcă:
 ### 6. După ce ți-ai creat contul
 Ca nimeni altcineva din rețea să nu-și poată face cont, pune în `.env` linia `ALLOW_REGISTRATION=false`, apoi rulează `pornire.cmd`.
 
+## Ce găsești în aplicație
+
+- **Drumul zilei**: un drumeț merge de acasă la tabăra de seară; fiecare etapă bifată ajunge în rucsac. Sus, desfășurătorul zilei în ordinea orelor.
+- **Repere cu oră** (trezire, ajuns la program, culcare) și **mese** cu calorii și macronutrienți; scor de nutriție seara.
+- **Personaj** cu 8 atribute, **vârfuri** (obiective în lei, cu timp de gândire), **provocări surpriză**, **serie cu scuturi**.
+- Cercetarea UX din spatele designului: [docs/ux-research.md](docs/ux-research.md).
+
 ## Cum funcționează în spate
 
 - **app**: imaginea construiește interfața (Node) și o servește cu Apache. Rutele `/api/*` ajung la `api/public/index.php`.
@@ -100,6 +107,7 @@ cd frontend
 npm install
 npm run dev     # http://localhost:5173, cererile /api merg la serverul Docker de pe :8080
 npm test        # testele logicii de joc
+npm run check   # tipuri + teste + build (la fel ca în CI)
 ```
 
 Fără serverul Docker, interfața funcționează în **mod local**: datele se salvează doar în browser.
