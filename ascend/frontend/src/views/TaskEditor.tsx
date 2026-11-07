@@ -4,7 +4,7 @@ import { ATTRIBUTE_MAP } from '../domain/attributes';
 import { WEEKDAY_SHORT, WEEK_ORDER } from '../domain/dates';
 import { xpForTask } from '../domain/engine';
 import { uid } from '../domain/id';
-import type { AttributeKey, Schedule, Task } from '../domain/types';
+import type { AttributeKey, Schedule, Task, TaskKind, TimeMode } from '../domain/types';
 import { useApp } from '../state/store';
 import { AttributeChips, Modal, Switch } from '../ui/components';
 
@@ -33,9 +33,13 @@ export function TaskEditor({
   const [attributes, setAttributes] = useState<AttributeKey[]>(task?.attributes ?? defaultAttributes);
   const [schedule, setSchedule] = useState<Schedule>(task?.schedule ?? { kind: 'daily', days: [] });
   const [special, setSpecial] = useState(task?.special ?? defaultSpecial);
+  const [kind, setKind] = useState<TaskKind>(task?.kind ?? 'task');
+  const [time, setTime] = useState(task?.time ?? '');
+  const [timeMode, setTimeMode] = useState<TimeMode>(task?.timeMode ?? 'by');
+  const [tolerance, setTolerance] = useState(task?.tolerance ?? 10);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const valid = title.trim().length > 0 && attributes.length > 0 && points > 0;
+  const valid = title.trim().length > 0 && attributes.length > 0 && points > 0 && (kind === 'task' || /^\d{2}:\d{2}$/.test(time));
   const preview = xpForTask({ points, attributes } as Task, 1);
   const mult = state.settings.bonusMultiplier;
 
@@ -43,12 +47,16 @@ export function TaskEditor({
     if (!valid) return;
     api.saveTask({
       id: task?.id ?? uid('t'),
+      kind,
+      time: time || undefined,
+      timeMode: kind === 'time' ? timeMode : undefined,
+      tolerance: kind === 'time' ? tolerance : undefined,
       title: title.trim(),
       notes: notes.trim() || undefined,
       points,
       attributes,
       schedule,
-      special,
+      special: kind === 'task' && special,
       archived: task?.archived ?? false,
       createdAt: task?.createdAt ?? new Date().toISOString(),
     });
@@ -77,6 +85,56 @@ export function TaskEditor({
         </>
       }
     >
+      <div className="field">
+        <label>Tip de etapă</label>
+        <div className="segmented full">
+          <button type="button" className={kind === 'task' ? 'active' : ''} onClick={() => setKind('task')}>
+            Sarcină
+          </button>
+          <button type="button" className={kind === 'time' ? 'active' : ''} onClick={() => (setKind('time'), setTime(time || '07:00'))}>
+            Reper cu oră
+          </button>
+          <button type="button" className={kind === 'meal' ? 'active' : ''} onClick={() => (setKind('meal'), setTime(time || '13:00'), attributes.length === 0 && setAttributes(['health']))}>
+            Masă
+          </button>
+        </div>
+        <span className="hint">
+          {kind === 'task'
+            ? 'O activitate pe care o bifezi când o faci.'
+            : kind === 'time'
+              ? 'Notezi ora reală (ex. trezirea); primești punctele doar dacă te încadrezi.'
+              : 'Notezi ce ai mâncat (calorii și macronutrienți); contează la scorul de nutriție.'}
+        </span>
+      </div>
+
+      <div className="row wrap" style={{ gap: 10 }}>
+        <div className="field">
+          <label>{kind === 'time' ? 'Ora țintă' : kind === 'meal' ? 'Ora mesei' : 'Ora aproximativă (opțional)'}</label>
+          <input className="input num" type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ width: 130 }} />
+        </div>
+        {kind === 'time' && (
+          <>
+            <div className="field">
+              <label>Regulă</label>
+              <select className="select" value={timeMode} onChange={(e) => setTimeMode(e.target.value as TimeMode)} style={{ width: 170 }}>
+                <option value="by">cel târziu la ora țintă</option>
+                <option value="after">cel devreme la ora țintă</option>
+                <option value="log">doar notez ora</option>
+              </select>
+            </div>
+            {timeMode !== 'log' && (
+              <div className="field">
+                <label>Toleranță</label>
+                <div className="input-suffix" style={{ width: 110 }}>
+                  <input className="input num" type="number" min={0} value={tolerance} onChange={(e) => setTolerance(Math.max(0, Number(e.target.value) || 0))} />
+                  <span>min</span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       <div className="field">
         <label>Titlu</label>
         <input className="input" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex. Citit 30 de minute" maxLength={80} onKeyDown={(e) => e.key === 'Enter' && save()} />
@@ -157,6 +215,7 @@ export function TaskEditor({
         )}
       </div>
 
+      {kind === 'task' && (
       <div className="card" style={{ padding: 14, background: 'var(--surface-2)' }}>
         <div className="row-between">
           <div className="row" style={{ alignItems: 'flex-start' }}>
@@ -171,6 +230,7 @@ export function TaskEditor({
           <Switch checked={special} onChange={setSpecial} label="Lista specială" />
         </div>
       </div>
+      )}
 
       <div className="field">
         <label>Note (opțional)</label>

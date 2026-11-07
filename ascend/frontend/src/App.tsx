@@ -11,7 +11,7 @@ import { GoalsView } from './views/GoalsView';
 import { OnboardingView } from './views/OnboardingView';
 import { SettingsView } from './views/SettingsView';
 import { TasksView } from './views/TasksView';
-import { World, type PanelId } from './world/World';
+import { Journey, type PanelId } from './world/Journey';
 
 const PANELS: PanelId[] = ['tasks', 'goals', 'hero', 'settings'];
 
@@ -60,7 +60,7 @@ function Shell() {
   if (!state.character) return <OnboardingView />;
   return (
     <>
-      <World openPanel={setPanel} />
+      <Journey openPanel={setPanel} />
       {panel && (
         <Panel onClose={() => setPanel(null)}>
           {panel === 'tasks' && <TasksView />}

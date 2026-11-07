@@ -5,11 +5,14 @@ import { createEmptyState, normalizeState } from '../domain/engine';
 import { AVATAR_COLORS } from '../domain/templates';
 import type { BonusFrequency, GoalMode } from '../domain/types';
 import { useApp } from '../state/store';
+import { DEFAULT_NUTRITION } from '../domain/nutrition';
 import { Modal, Switch } from '../ui/components';
+import { NutritionForm, RoutineSetup } from '../world/RoutineSetup';
 
 export function SettingsView() {
   const { state, api, session, logout, notify, backend } = useApp();
   const [pwOpen, setPwOpen] = useState(false);
+  const [routineOpen, setRoutineOpen] = useState(false);
   const s = state.settings;
   const c = state.character!;
   const fileRef = useRef<HTMLInputElement>(null);
@@ -75,6 +78,24 @@ export function SettingsView() {
               ))}
             </div>
           </Row>
+        </Section>
+
+        <Section title="Ziua mea și nutriție">
+          <Row title="Repere și mese zilnice" desc="Trezire, ajuns la muncă, mese, culcare: apar pe drum și în desfășurător.">
+            <button className="btn" onClick={() => setRoutineOpen(true)}>
+              Adaugă repere
+            </button>
+          </Row>
+          <div className="setting-row" style={{ display: 'block' }}>
+            <div className="row-between" style={{ marginBottom: 12 }}>
+              <div className="col">
+                <span className="strong">Profil nutrițional</span>
+                <span className="muted small">Pe baza lui se calculează țintele de calorii și macronutrienți și scorul zilnic.</span>
+              </div>
+              <Switch checked={!!s.nutrition} onChange={(v) => api.updateSettings({ nutrition: v ? DEFAULT_NUTRITION : undefined })} label="Profil nutrițional" />
+            </div>
+            {s.nutrition && <NutritionForm value={s.nutrition} onChange={(n) => api.updateSettings({ nutrition: n })} />}
+          </div>
         </Section>
 
         <Section title="Economie">
@@ -174,6 +195,7 @@ export function SettingsView() {
       </div>
 
       {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
+      {routineOpen && <RoutineSetup onClose={() => setRoutineOpen(false)} />}
       {confirmReset && (
         <Modal
           size="sm"

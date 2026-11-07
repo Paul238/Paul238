@@ -1,8 +1,12 @@
 import { ATTRIBUTE_KEYS, emptyAttributeRecord } from './attributes';
 import { addDays, addHours, dateKey, daysBetween, keyOf, weekStart, weekday } from './dates';
 import { attrXpToNext, charXpToNext, levelFromXp, type LevelInfo } from './leveling';
+import { dayTotals, evaluateTime, hhmmOf, nutritionScore, targetsFor } from './nutrition';
 import type {
   AppState,
+  CustomFood,
+  DayResult,
+  FoodEntry,
   AttributeKey,
   BonusChallenge,
   BonusFrequency,
@@ -41,6 +45,9 @@ export function createEmptyState(): AppState {
     goals: [],
     bonuses: [],
     xpGrants: [],
+    meals: [],
+    foods: [],
+    days: {},
     settings: { ...DEFAULT_SETTINGS, cooldownHours: { ...DEFAULT_SETTINGS.cooldownHours } },
     meta: { seenAchievements: [] },
   };
@@ -52,6 +59,9 @@ export function normalizeState(raw: Partial<AppState>): AppState {
   return {
     ...base,
     ...raw,
+    meals: raw.meals ?? [],
+    foods: raw.foods ?? [],
+    days: raw.days ?? {},
     settings: {
       ...base.settings,
       ...(raw.settings ?? {}),
@@ -277,6 +287,7 @@ export function bonusEligibleTasks(state: AppState, now: string): Task[] {
   const tomorrow = addDays(today, 1);
   return state.tasks.filter(
     (t) =>
+      (t.kind ?? 'task') === 'task' &&
       t.special &&
       !t.archived &&
       !isOnceDone(state, t) &&
@@ -297,7 +308,13 @@ export type Action =
   | { type: 'task/archive'; id: string; archived: boolean }
   | { type: 'task/delete'; id: string }
   | { type: 'task/toggleSpecial'; id: string }
-  | { type: 'task/complete'; taskId: string; now: string; id: string }
+  | { type: 'task/complete'; taskId: string; now: string; id: string; value?: string }
+  | { type: 'meal/addFood'; date: DateKey; taskId: string; food: FoodEntry; logId: string }
+  | { type: 'meal/removeFood'; date: DateKey; taskId: string; foodId: string }
+  | { type: 'food/save'; food: CustomFood }
+  | { type: 'food/delete'; id: string }
+  | { type: 'day/close'; date: DateKey; now: string; seed: string }
+  | { type: 'day/autoclose'; today: DateKey; now: string; seed: string }
   | { type: 'completion/undo'; id: string; now: string; entryId: string }
   | { type: 'goal/create'; goal: Omit<Goal, 'status' | 'saved' | 'activatesAt'> }
   | { type: 'goal/update'; id: string; patch: Partial<Pick<Goal, 'title' | 'price' | 'reason' | 'url' | 'attribute' | 'mode'>> }
@@ -376,7 +393,15 @@ export function reducer(state: AppState, action: Action): AppState {
       const bonus = activeBonusFor(state, task.id, action.now);
       const bonusMultiplier = bonus ? bonus.multiplier : 1;
       const streakMultiplier = streakMultiplierFor(streakEndingAt(state, addDays(date, -1)), state.settings.streakBonus);
-      const credits = Math.round(task.points * bonusMultiplier * streakMultiplier);
+      // reperele cu oră aduc puncte doar dacă ora a fost respectată
+      let value: string | undefined;
+      let success: boolean | undefined;
+      if (task.kind === 'time' && task.time) {
+        value = action.value ?? hhmmOf(action.now);
+        success = evaluateTime(task.time, task.timeMode ?? 'by', task.tolerance ?? 0, value).success;
+      }
+      const earned = success === false ? 0 : 1;
+      const credits = Math.round(task.points * bonusMultiplier * streakMultiplier) * earned;
       const completion: Completion = {
         id: action.id,
         taskId: task.id,
@@ -387,8 +412,10 @@ export function reducer(state: AppState, action: Action): AppState {
         bonusMultiplier,
         streakMultiplier,
         credits,
-        xp: xpForTask(task, bonusMultiplier),
+        xp: earned ? xpForTask(task, bonusMultiplier) : {},
         bonusId: bonus?.id,
+        value,
+        success,
       };
       return {
         ...state,
@@ -399,7 +426,7 @@ export function reducer(state: AppState, action: Action): AppState {
             at: action.now,
             amount: credits,
             kind: 'earn',
-            label: bonus ? `${task.title} · provocare ×${bonus.multiplier}` : task.title,
+            label: bonus ? `${task.title} · provocare ×${bonus.multiplier}` : value ? `${task.title} · ${value}${success ? '' : ' (ratat)'}` : task.title,
             ref: completion.id,
           },
           state,
@@ -530,12 +557,78 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'bonus/reveal':
       return { ...state, bonuses: state.bonuses.map((b) => (b.id === action.id ? { ...b, revealed: true } : b)) };
 
+    case 'meal/addFood': {
+      const existing = state.meals.find((m) => m.date === action.date && m.taskId === action.taskId);
+      return {
+        ...state,
+        meals: existing
+          ? state.meals.map((m) => (m === existing ? { ...m, foods: [...m.foods, action.food] } : m))
+          : [...state.meals, { id: action.logId, date: action.date, taskId: action.taskId, foods: [action.food] }],
+      };
+    }
+
+    case 'meal/removeFood':
+      return {
+        ...state,
+        meals: state.meals.map((m) =>
+          m.date === action.date && m.taskId === action.taskId ? { ...m, foods: m.foods.filter((f) => f.id !== action.foodId) } : m,
+        ),
+      };
+
+    case 'food/save': {
+      const exists = state.foods.some((f) => f.id === action.food.id || f.name.toLowerCase() === action.food.name.toLowerCase());
+      return {
+        ...state,
+        foods: exists
+          ? state.foods.map((f) => (f.id === action.food.id || f.name.toLowerCase() === action.food.name.toLowerCase() ? { ...action.food, id: f.id } : f))
+          : [...state.foods, action.food],
+      };
+    }
+
+    case 'food/delete':
+      return { ...state, foods: state.foods.filter((f) => f.id !== action.id) };
+
+    case 'day/close':
+      return closeDay(state, action.date, action.now, action.seed);
+
+    case 'day/autoclose': {
+      const pending = [...new Set(state.meals.filter((m) => m.date < action.today && m.foods.length).map((m) => m.date))].filter(
+        (d) => !state.days[d],
+      );
+      return pending.reduce((st, d) => closeDay(st, d, action.now, `${action.seed}-${d}`), state);
+    }
+
     case 'meta/seeAchievements':
       return { ...state, meta: { ...state.meta, seenAchievements: [...new Set([...state.meta.seenAchievements, ...action.ids])] } };
 
     case 'state/replace':
       return normalizeState(action.state);
   }
+}
+
+/** încheie ziua: evaluează nutriția (dacă există mese notate și un profil) și acordă creditele */
+export function closeDay(state: AppState, date: DateKey, now: string, seed: string): AppState {
+  if (state.days[date]) return state;
+  const profile = state.settings.nutrition;
+  const hasMeals = state.meals.some((m) => m.date === date && m.foods.length > 0);
+  const result: DayResult = { closedAt: now };
+  let next: AppState = state;
+  if (profile && hasMeals) {
+    const totals = dayTotals(state, date);
+    const targets = targetsFor(profile);
+    const { score } = nutritionScore(totals, targets);
+    const credits = Math.round(profile.points * score);
+    result.nutrition = { totals, targets, score, credits };
+    if (credits > 0) {
+      const label = `Nutriție ${date.split('-').reverse().slice(0, 2).join('.')} · scor ${Math.round(score * 100)}%`;
+      next = {
+        ...next,
+        ledger: [...next.ledger, { id: `l-${seed}`, at: now, amount: credits, kind: 'earn', label, ref: `day-${date}` }],
+        xpGrants: [...next.xpGrants, { id: `x-${seed}`, at: now, attribute: 'health', amount: credits, label }],
+      };
+    }
+  }
+  return { ...next, days: { ...next.days, [date]: result } };
 }
 
 export function developmentXp(requiredCredits: number): number {

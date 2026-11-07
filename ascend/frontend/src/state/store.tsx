@@ -13,7 +13,7 @@ import {
 } from '../domain/engine';
 import { uid } from '../domain/id';
 import { characterTitle } from '../domain/leveling';
-import type { AppState, AttributeKey, Character, Goal, Settings, Task } from '../domain/types';
+import type { AppState, AttributeKey, Character, CustomFood, FoodEntry, Goal, Settings, Task } from '../domain/types';
 import type { Session } from '../services/auth';
 import type { Backend } from '../services/backend';
 import type { Loaded } from '../services/storage';
@@ -51,7 +51,13 @@ function createApi(dispatch: (a: Action) => void) {
     archiveTask: (id: string, archived: boolean) => dispatch({ type: 'task/archive', id, archived }),
     deleteTask: (id: string) => dispatch({ type: 'task/delete', id }),
     toggleSpecial: (id: string) => dispatch({ type: 'task/toggleSpecial', id }),
-    completeTask: (taskId: string) => dispatch({ type: 'task/complete', taskId, now: now(), id: uid('c') }),
+    completeTask: (taskId: string, value?: string) => dispatch({ type: 'task/complete', taskId, now: now(), id: uid('c'), value }),
+    addFood: (date: string, taskId: string, food: Omit<FoodEntry, 'id'>) =>
+      dispatch({ type: 'meal/addFood', date, taskId, food: { ...food, id: uid('f') }, logId: uid('m') }),
+    removeFood: (date: string, taskId: string, foodId: string) => dispatch({ type: 'meal/removeFood', date, taskId, foodId }),
+    saveFood: (food: Omit<CustomFood, 'id'>) => dispatch({ type: 'food/save', food: { ...food, id: uid('cf') } }),
+    closeDay: (date: string) => dispatch({ type: 'day/close', date, now: now(), seed: uid('d') }),
+    autoCloseDays: (today: string) => dispatch({ type: 'day/autoclose', today, now: now(), seed: uid('d') }),
     undoCompletion: (id: string) => dispatch({ type: 'completion/undo', id, now: now(), entryId: uid('l') }),
     createGoal: (goal: Omit<Goal, 'status' | 'saved' | 'activatesAt' | 'id' | 'createdAt'>) =>
       dispatch({ type: 'goal/create', goal: { ...goal, id: uid('g'), createdAt: now() } }),
@@ -218,8 +224,11 @@ export function AppProvider({
 
   // motorul provocărilor rulează periodic
   useEffect(() => {
-    if (state.character) api.tickBonus();
-  }, [now, state.character, api]);
+    if (state.character) {
+      api.tickBonus();
+      api.autoCloseDays(today);
+    }
+  }, [now, today, state.character, api]);
 
   const derived = useMemo(
     () => ({

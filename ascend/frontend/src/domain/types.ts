@@ -19,8 +19,19 @@ export type Schedule =
   /** o singură dată, cu termen opțional */
   | { kind: 'once'; due?: DateKey };
 
+/** task = sarcină obișnuită; time = reper cu oră fixă (trezire, ajuns la muncă…); meal = masă */
+export type TaskKind = 'task' | 'time' | 'meal';
+/** by = cel târziu la ora țintă; after = cel devreme la ora țintă; log = doar se notează ora */
+export type TimeMode = 'by' | 'after' | 'log';
+
 export interface Task {
   id: string;
+  kind?: TaskKind;
+  /** ora (HH:MM): ținta pentru repere, ora aproximativă pentru mese și sarcini */
+  time?: string;
+  timeMode?: TimeMode;
+  /** toleranța în minute pentru repere */
+  tolerance?: number;
   title: string;
   notes?: string;
   points: number;
@@ -45,6 +56,69 @@ export interface Completion {
   credits: number;
   xp: Partial<Record<AttributeKey, number>>;
   bonusId?: string;
+  /** ora reală notată (HH:MM), pentru repere */
+  value?: string;
+  /** reperul a fost respectat */
+  success?: boolean;
+}
+
+/* ---------- nutriție ---------- */
+
+export interface FoodEntry {
+  id: string;
+  name: string;
+  grams?: number;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export interface MealLog {
+  id: string;
+  date: DateKey;
+  taskId: string;
+  foods: FoodEntry[];
+}
+
+/** aliment salvat de utilizator (valori pe porție sau la 100 g) */
+export interface CustomFood {
+  id: string;
+  name: string;
+  per: 'portion' | '100g';
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export type Sex = 'm' | 'f';
+export type NutritionGoal = 'cut' | 'maintain' | 'bulk';
+
+export interface NutritionProfile {
+  sex: Sex;
+  age: number;
+  heightCm: number;
+  weightKg: number;
+  /** factor de activitate 1.2 – 1.9 */
+  activity: number;
+  goal: NutritionGoal;
+  /** ținte setate manual (au prioritate față de calcul) */
+  manual?: Partial<MacroTargets>;
+  /** credite maxime pentru o zi încadrată perfect */
+  points: number;
+}
+
+export interface MacroTargets {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export interface DayResult {
+  closedAt: ISODate;
+  nutrition?: { totals: MacroTargets; targets: MacroTargets; score: number; credits: number };
 }
 
 export type LedgerKind = 'earn' | 'reversal' | 'allocate' | 'release' | 'adjust';
@@ -118,6 +192,7 @@ export interface Settings {
   /** zile libere: nu întrerup seria (0 = duminică) */
   restDays: number[];
   theme: 'system' | 'dark' | 'light';
+  nutrition?: NutritionProfile;
 }
 
 export interface Character {
@@ -141,6 +216,9 @@ export interface AppState {
   goals: Goal[];
   bonuses: BonusChallenge[];
   xpGrants: XpGrant[];
+  meals: MealLog[];
+  foods: CustomFood[];
+  days: Record<DateKey, DayResult>;
   settings: Settings;
   meta: Meta;
 }

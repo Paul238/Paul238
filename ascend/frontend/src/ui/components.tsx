@@ -16,7 +16,7 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'sm';
+  size?: 'sm' | 'lg';
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -25,7 +25,7 @@ export function Modal({
   }, [onClose]);
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${size === 'sm' ? 'modal-sm' : ''}`} role="dialog" aria-modal="true">
+      <div className={`modal ${size ? `modal-${size}` : ''}`} role="dialog" aria-modal="true">
         <div className="modal-head">
           <h2>{title}</h2>
           <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Închide">

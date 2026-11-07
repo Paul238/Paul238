@@ -21,7 +21,7 @@ export const TASK_TEMPLATES: TaskTemplate[] = [
   { title: 'Exersat o limbă străină (20 min)', points: 15, attributes: ['intellect'], schedule: daily },
   { title: 'Lucru la un proiect personal (1h)', points: 30, attributes: ['creativity', 'career'], schedule: weekly(2), special: true },
   { title: 'Scris / jurnal', points: 10, attributes: ['creativity', 'discipline'], schedule: daily },
-  { title: 'Trezire înainte de 7:00', points: 10, attributes: ['discipline'], schedule: { kind: 'daily', days: [1, 2, 3, 4, 5] } },
+  { title: 'Plimbare 30 de minute', points: 10, attributes: ['health', 'discipline'], schedule: daily },
   { title: 'Meditație 10 minute', points: 10, attributes: ['discipline', 'health'], schedule: daily, special: true },
   { title: 'Fără social media până la prânz', points: 15, attributes: ['discipline'], schedule: daily },
   { title: 'Notat cheltuielile zilei', points: 5, attributes: ['finance'], schedule: daily },

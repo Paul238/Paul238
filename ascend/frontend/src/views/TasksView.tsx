@@ -143,6 +143,9 @@ export function TasksView() {
                   {t.attributes.map((a) => (
                     <AttrTag key={a} attr={a} />
                   ))}
+                  {t.kind === 'time' && <span className="badge">Reper · {t.time}</span>}
+                  {t.kind === 'meal' && <span className="badge badge-success">Masă · {t.time}</span>}
+                  {(t.kind ?? 'task') === 'task' && t.time && <span>~{t.time}</span>}
                   <span>{scheduleLabel(t)}</span>
                   <span>{fmt(counts.get(t.id) ?? 0)} realizări</span>
                   {isOnceDone(state, t) && <span className="badge badge-success">Finalizată</span>}
