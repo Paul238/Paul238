@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
 import { addDays, keyOf, parseKey, weekStart } from '../domain/dates';
 import { METRIC_MAP } from '../domain/metrics';
-import { shoppingSpent } from '../domain/shopping';
+import { CATEGORY_MAP, monthSummary } from '../domain/money';
 import { useApp } from '../state/store';
 import { fmt, fmt1, ron as lei } from '../ui/format';
 import { StageGlyph } from '../ui/stage';
@@ -19,6 +19,7 @@ interface Entry {
   sub?: string;
   credits?: number;
   money?: number;
+  income?: number;
   color: string;
   taskId?: string;
 }
@@ -58,6 +59,18 @@ export function HistoryView() {
     for (const g of state.goals)
       if (g.status === 'purchased' && g.purchasedAt)
         out.push({ key: g.id, date: keyOf(g.purchasedAt), at: g.purchasedAt, kind: 'goal', title: g.title, sub: `obiectiv · ${fmt(g.paidCredits ?? 0)} credite`, money: g.paidPrice ?? g.price, color: 'var(--gold)' });
+    for (const t of state.transactions)
+      out.push({
+        key: t.id,
+        date: t.date,
+        at: t.at,
+        kind: 'shop',
+        title: t.title,
+        sub: `${CATEGORY_MAP[t.category].label}${t.recurringId ? (t.extra ? ' · plată în avans' : ' · plată fixă') : ''}`,
+        money: t.type === 'expense' ? t.amount : undefined,
+        income: t.type === 'income' ? t.amount : undefined,
+        color: CATEGORY_MAP[t.category].color,
+      });
     for (const m of state.metrics) {
       const def = METRIC_MAP[m.metric];
       if (!def) continue;
@@ -77,7 +90,7 @@ export function HistoryView() {
   const ms = today.slice(0, 8) + '01';
   const totalCredits = state.completions.reduce((s, c) => s + c.credits, 0);
   const goalMoney = (a: string, b: string) => state.goals.filter((g) => g.status === 'purchased' && g.purchasedAt && keyOf(g.purchasedAt) >= a && keyOf(g.purchasedAt) <= b).reduce((s, g) => s + (g.paidPrice ?? g.price), 0);
-  const monthMoney = shoppingSpent(state.shopping, ms, today) + goalMoney(ms, today);
+  const monthMoney = monthSummary(state, today.slice(0, 7), today).expenses + goalMoney(ms, today);
 
   const last30 = Array.from({ length: 30 }, (_, i) => {
     const d = addDays(today, i - 29);
@@ -130,7 +143,7 @@ export function HistoryView() {
           [
             ['all', 'Tot'],
             ['tasks', 'Activități'],
-            ['money', 'Cumpărături'],
+            ['money', 'Bani'],
             ['metrics', 'Măsurători'],
           ] as [Filter, string][]
         ).map(([f, l]) => (
@@ -171,6 +184,7 @@ export function HistoryView() {
                     </span>
                     {e.credits !== undefined && <span className="hist-credits num">+{fmt(e.credits)}</span>}
                     {e.money !== undefined && <span className="hist-money num">−{lei(e.money)}</span>}
+                    {e.income !== undefined && <span className="hist-credits num" style={{ color: 'var(--success)' }}>+{lei(e.income)}</span>}
                   </div>
                 );
               })}

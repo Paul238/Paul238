@@ -1,4 +1,4 @@
-import { CalendarDays, History, ListChecks, Orbit, Settings, ShoppingCart, UserRound } from 'lucide-react';
+import { CalendarDays, History, ListChecks, Orbit, Settings, UserRound, Wallet } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 export type AppView = 'home' | 'today' | 'plan' | 'goals' | 'history';
@@ -7,7 +7,7 @@ const NAV: { id: AppView; label: string; icon: ReactNode }[] = [
   { id: 'home', label: 'Personaj', icon: <UserRound size={20} /> },
   { id: 'today', label: 'Azi', icon: <ListChecks size={20} /> },
   { id: 'plan', label: 'Plan', icon: <CalendarDays size={20} /> },
-  { id: 'goals', label: 'Cumpărături', icon: <ShoppingCart size={20} /> },
+  { id: 'goals', label: 'Bani', icon: <Wallet size={20} /> },
   { id: 'history', label: 'Istoric', icon: <History size={20} /> },
 ];
 

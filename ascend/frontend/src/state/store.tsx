@@ -14,6 +14,7 @@ import {
 import { uid } from '../domain/id';
 import type { AppState, AttributeKey, Character, CustomFood, FoodEntry, Goal, Settings, Task } from '../domain/types';
 import type { MetricKey } from '../domain/metrics';
+import { guessCategory, type CategoryKey, type Recurring, type Transaction } from '../domain/money';
 import type { Session } from '../services/auth';
 import type { Backend } from '../services/backend';
 import type { Loaded } from '../services/storage';
@@ -60,10 +61,19 @@ function createApi(dispatch: (a: Action) => void) {
       dispatch({ type: 'metric/add', entry: { id: uid('m'), metric, date: keyOf(at), at, value, value2 }, grantId: uid('x') });
     },
     deleteMetric: (id: string) => dispatch({ type: 'metric/delete', id }),
-    addShopping: (title: string, qty?: string) => dispatch({ type: 'shop/add', item: { id: uid('s'), title, qty: qty || undefined, createdAt: now() } }),
+    addShopping: (title: string, qty?: string, category?: CategoryKey) =>
+      dispatch({ type: 'shop/add', item: { id: uid('s'), title, qty: qty || undefined, createdAt: now(), category: category ?? guessCategory(title, 'shopping') } }),
+    addTx: (tx: Omit<Transaction, 'id' | 'at'>) => dispatch({ type: 'tx/add', tx: { ...tx, id: uid('tx'), at: now() } }),
+    deleteTx: (id: string) => dispatch({ type: 'tx/delete', id }),
+    saveRecurring: (rec: Omit<Recurring, 'id'> & { id?: string }) => dispatch({ type: 'rec/save', rec: { ...rec, id: rec.id ?? uid('r') } }),
+    deleteRecurring: (id: string) => dispatch({ type: 'rec/delete', id }),
+    payRecurring: (id: string, month: string, amount?: number) => dispatch({ type: 'rec/pay', id, month, now: now(), txId: uid('tx'), amount }),
+    unpayRecurring: (id: string, month: string) => dispatch({ type: 'rec/unpay', id, month }),
+    payExtra: (id: string, amount: number) => dispatch({ type: 'rec/extra', id, amount, now: now(), txId: uid('tx') }),
+    autopostMoney: (today: string) => dispatch({ type: 'money/autopost', today, now: now(), seed: uid('ap') }),
     buyShopping: (id: string, cost?: number) => dispatch({ type: 'shop/buy', id, now: now(), cost }),
     unbuyShopping: (id: string) => dispatch({ type: 'shop/unbuy', id }),
-    updateShopping: (id: string, patch: { title?: string; qty?: string; cost?: number }) => dispatch({ type: 'shop/update', id, patch }),
+    updateShopping: (id: string, patch: { title?: string; qty?: string; cost?: number; category?: CategoryKey }) => dispatch({ type: 'shop/update', id, patch }),
     deleteShopping: (id: string) => dispatch({ type: 'shop/delete', id }),
     /** întoarce id-ul completării, ca să poată fi anulată din notificare */
     completeTask: (taskId: string, value?: string) => {
@@ -247,8 +257,14 @@ export function AppProvider({
     if (state.character) {
       api.tickBonus();
       api.autoCloseDays(today);
+      api.autopostMoney(today);
     }
   }, [now, today, state.character, api]);
+
+  // o plată automată nou adăugată (ex. salariul de pe 10) se înregistrează imediat
+  useEffect(() => {
+    if (state.character) api.autopostMoney(today);
+  }, [state.recurring, today, state.character, api]);
 
   const derived = useMemo(
     () => ({

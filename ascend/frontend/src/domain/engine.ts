@@ -1,6 +1,7 @@
 import { ATTRIBUTE_KEYS, emptyAttributeRecord } from './attributes';
 import { addDays, addHours, dateKey, daysBetween, keyOf, weekStart, weekday } from './dates';
 import { attrXpToNext, charXpToNext, levelFromXp, type LevelInfo } from './leveling';
+import { dueAutoPayments, guessCategory, occurrenceDate, paidTx, type Recurring, type Transaction } from './money';
 import type { ShoppingItem } from './shopping';
 import { METRIC_MAP, METRIC_XP, plausibleMetric, type MetricEntry } from './metrics';
 import { dayTotals, evaluateTime, hhmmOf, nutritionScore, plausibleFood, targetsFor } from './nutrition';
@@ -51,6 +52,8 @@ export function createEmptyState(): AppState {
     foods: [],
     metrics: [],
     shopping: [],
+    transactions: [],
+    recurring: [],
     days: {},
     settings: { ...DEFAULT_SETTINGS, cooldownHours: { ...DEFAULT_SETTINGS.cooldownHours } },
     meta: { seenAchievements: [] },
@@ -67,7 +70,9 @@ export function normalizeState(raw: Partial<AppState>): AppState {
     meals: (raw.meals ?? []).map((m) => ({ ...m, foods: m.foods.filter((f) => plausibleFood(f)) })),
     foods: raw.foods ?? [],
     metrics: raw.metrics ?? [],
-    shopping: raw.shopping ?? [],
+    shopping: (raw.shopping ?? []).map((i) => ({ ...i, category: i.category ?? guessCategory(i.title, 'shopping') })),
+    transactions: raw.transactions ?? [],
+    recurring: raw.recurring ?? [],
     days: raw.days ?? {},
     settings: {
       ...base.settings,
@@ -440,8 +445,16 @@ export type Action =
   | { type: 'shop/add'; item: ShoppingItem }
   | { type: 'shop/buy'; id: string; now: string; cost?: number }
   | { type: 'shop/unbuy'; id: string }
-  | { type: 'shop/update'; id: string; patch: Partial<Pick<ShoppingItem, 'title' | 'qty' | 'cost'>> }
+  | { type: 'shop/update'; id: string; patch: Partial<Pick<ShoppingItem, 'title' | 'qty' | 'cost' | 'category'>> }
   | { type: 'shop/delete'; id: string }
+  | { type: 'tx/add'; tx: Transaction }
+  | { type: 'tx/delete'; id: string }
+  | { type: 'rec/save'; rec: Recurring }
+  | { type: 'rec/delete'; id: string }
+  | { type: 'rec/pay'; id: string; month: string; now: string; txId: string; amount?: number }
+  | { type: 'rec/unpay'; id: string; month: string }
+  | { type: 'rec/extra'; id: string; amount: number; now: string; txId: string }
+  | { type: 'money/autopost'; today: DateKey; now: string; seed: string }
   | { type: 'task/complete'; taskId: string; now: string; id: string; value?: string }
   | { type: 'meal/addFood'; date: DateKey; taskId: string; food: FoodEntry; logId: string }
   | { type: 'meal/removeFood'; date: DateKey; taskId: string; foodId: string }
@@ -536,6 +549,63 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'shop/update':
       return { ...state, shopping: state.shopping.map((i) => (i.id === action.id ? { ...i, ...action.patch } : i)) };
+
+    case 'tx/add':
+      return action.tx.amount > 0 && action.tx.amount < 100_000_000 && action.tx.title.trim() ? { ...state, transactions: [...state.transactions, action.tx] } : state;
+
+    case 'tx/delete':
+      return { ...state, transactions: state.transactions.filter((t) => t.id !== action.id) };
+
+    case 'rec/save': {
+      const exists = state.recurring.some((r) => r.id === action.rec.id);
+      return { ...state, recurring: exists ? state.recurring.map((r) => (r.id === action.rec.id ? action.rec : r)) : [...state.recurring, action.rec] };
+    }
+
+    case 'rec/delete':
+      // arhivăm, ca istoricul plăților să rămână
+      return { ...state, recurring: state.recurring.map((r) => (r.id === action.id ? { ...r, archived: true } : r)) };
+
+    case 'rec/pay': {
+      const r = state.recurring.find((x) => x.id === action.id);
+      const date = r && occurrenceDate(r, action.month);
+      if (!r || !date || paidTx(state, r, action.month)) return state;
+      const today = keyOf(action.now);
+      return {
+        ...state,
+        transactions: [
+          ...state.transactions,
+          { id: action.txId, type: r.type, title: r.title, amount: action.amount ?? r.amount, category: r.category, date: date < today ? date : today, at: action.now, recurringId: r.id, month: action.month },
+        ],
+      };
+    }
+
+    case 'rec/extra': {
+      const r = state.recurring.find((x) => x.id === action.id);
+      if (!r || !(action.amount > 0)) return state;
+      const date = keyOf(action.now);
+      return {
+        ...state,
+        transactions: [
+          ...state.transactions,
+          { id: action.txId, type: 'expense', title: `${r.title} · plată în avans`, amount: action.amount, category: r.category, date, at: action.now, recurringId: r.id, month: date.slice(0, 7), extra: true },
+        ],
+      };
+    }
+
+    case 'rec/unpay':
+      return { ...state, transactions: state.transactions.filter((t) => !(t.recurringId === action.id && t.month === action.month && !t.extra)) };
+
+    case 'money/autopost': {
+      const due = dueAutoPayments(state, action.today);
+      if (!due.length) return state;
+      return {
+        ...state,
+        transactions: [
+          ...state.transactions,
+          ...due.map(({ r, month, date }, i) => ({ id: `${action.seed}-${i}`, type: r.type, title: r.title, amount: r.amount, category: r.category, date, at: `${date}T09:00:00.000Z`, recurringId: r.id, month })),
+        ],
+      };
+    }
 
     case 'shop/delete':
       return { ...state, shopping: state.shopping.filter((i) => i.id !== action.id) };

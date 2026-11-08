@@ -233,6 +233,8 @@ export interface AppState {
   foods: CustomFood[];
   metrics: import('./metrics').MetricEntry[];
   shopping: import('./shopping').ShoppingItem[];
+  transactions: import('./money').Transaction[];
+  recurring: import('./money').Recurring[];
   days: Record<DateKey, DayResult>;
   settings: Settings;
   meta: Meta;

@@ -12,6 +12,7 @@ export interface ShoppingItem {
   boughtDate?: DateKey;
   /** cât a costat, în lei */
   cost?: number;
+  category?: import('./money').CategoryKey;
 }
 
 export function shoppingSpent(items: ShoppingItem[], from: DateKey, to: DateKey) {
