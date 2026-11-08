@@ -46,6 +46,10 @@ export interface Task {
   createdAt: ISODate;
   /** zile în care o sarcină recurentă e sărită (excepții din calendar) */
   skip?: DateKey[];
+  /** zile în plus în care apare (planificate manual, ex. „mâine merg și la sală”) */
+  extra?: DateKey[];
+  /** apare pe drum (activitate principală); implicit: reperele cu oră și mesele */
+  onRoad?: boolean;
 }
 
 export interface Completion {
@@ -225,6 +229,7 @@ export interface AppState {
   xpGrants: XpGrant[];
   meals: MealLog[];
   foods: CustomFood[];
+  metrics: import('./metrics').MetricEntry[];
   days: Record<DateKey, DayResult>;
   settings: Settings;
   meta: Meta;

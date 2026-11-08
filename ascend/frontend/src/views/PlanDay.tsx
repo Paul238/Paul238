@@ -6,7 +6,8 @@ import { calendarDay, scheduleLabel } from '../domain/engine';
 import type { Task } from '../domain/types';
 import { useApp } from '../state/store';
 import { fmt } from '../ui/format';
-import { StageGlyph } from '../world/Journey';
+import { StageGlyph } from '../ui/stage';
+import { ActivitySearch } from './ActivitySearch';
 import { TaskEditor } from './TaskEditor';
 
 export function dayName(k: string) {
@@ -53,11 +54,17 @@ export function PlanDay({ date, compact }: { date: string; compact?: boolean }) 
                     'doar în ziua asta'
                   )}
                   {status === 'skipped' && ' · sărită'}
+                  {t.extra?.includes(date) && ' · adăugată suplimentar'}
                   {item.completion?.value ? ` · notat ${item.completion.value}` : ''}
                 </small>
               </span>
               <span className="planday-pts num">+{item.completion?.credits ?? t.points}</span>
-              {future && recurring && status === 'planned' && (
+              {future && t.extra?.includes(date) && status === 'planned' && (
+                <button className="btn btn-sm btn-ghost" onClick={() => api.extraDate(t.id, date, false)}>
+                  <X size={14} /> Scoate
+                </button>
+              )}
+              {future && recurring && status === 'planned' && !t.extra?.includes(date) && (
                 <button className="btn btn-sm btn-ghost" onClick={() => api.skipDate(t.id, date, true)} title={`Nu apare ${rel}; regula rămâne`}>
                   <SkipForward size={14} /> Sari peste
                 </button>
@@ -76,9 +83,15 @@ export function PlanDay({ date, compact }: { date: string; compact?: boolean }) 
       </div>
 
       {future && (
+        <div className="mt-12">
+          <div className="eyebrow-label" style={{ marginBottom: 8 }}>Adaugă suplimentar în {date === today ? 'ziua de azi' : 'ziua asta'}</div>
+          <ActivitySearch mode="plan" date={date} />
+        </div>
+      )}
+      {future && (
         <div className="row wrap mt-12" style={{ gap: 8 }}>
-          <button className="btn btn-primary" onClick={() => setEditor({ once: true })}>
-            <Plus size={15} /> Doar pentru {date === today ? 'azi' : 'ziua asta'}
+          <button className="btn" onClick={() => setEditor({ once: true })}>
+            <Plus size={15} /> Doar în ziua asta (cu detalii)
           </button>
           <button className="btn" onClick={() => setEditor({ recurring: true })}>
             <Repeat size={15} /> Sarcină care se repetă

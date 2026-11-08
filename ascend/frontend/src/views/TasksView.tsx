@@ -13,9 +13,9 @@ type Tab = 'calendar' | 'all' | 'special' | 'archive';
 
 const FREQ_LABEL = { off: 'oprite', low: 'rar', normal: 'moderat', high: 'des', daily: 'zilnic' } as const;
 
-export function TasksView() {
+export function TasksView({ embedded = false }: { embedded?: boolean }) {
   const { state, api, now } = useApp();
-  const [tab, setTab] = useState<Tab>('calendar');
+  const [tab, setTab] = useState<Tab>(embedded ? 'all' : 'calendar');
   const [filter, setFilter] = useState<AttributeKey | 'all'>('all');
   const [editing, setEditing] = useState<Task | 'new' | null>(null);
 
@@ -38,6 +38,14 @@ export function TasksView() {
 
   return (
     <>
+      {embedded ? (
+        <div className="row-between" style={{ marginBottom: 12 }}>
+          <span className="muted small">Biblioteca ta de activități, grupată după cum se repetă.</span>
+          <button className="btn btn-primary btn-sm" onClick={() => setEditing('new')}>
+            <Plus size={15} /> Activitate nouă
+          </button>
+        </div>
+      ) : (
       <div className="page-head">
         <div>
           <h1>Sarcini</h1>
@@ -47,11 +55,14 @@ export function TasksView() {
           <Plus size={16} /> Sarcină nouă
         </button>
       </div>
+      )}
 
       <div className="tabs">
-        <button className={`tab ${tab === 'calendar' ? 'active' : ''}`} onClick={() => setTab('calendar')}>
-          <CalendarDays size={15} /> Calendar
-        </button>
+        {!embedded && (
+          <button className={`tab ${tab === 'calendar' ? 'active' : ''}`} onClick={() => setTab('calendar')}>
+            <CalendarDays size={15} /> Calendar
+          </button>
+        )}
         <button className={`tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
           <ListChecks size={15} /> Toate <span className="count">{active.length}</span>
         </button>

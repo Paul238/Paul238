@@ -5,7 +5,7 @@ import { addDays, dateKey, parseKey, weekStart } from '../domain/dates';
 import { calendarDay, weekCount, type PlanStatus, type TodayItem } from '../domain/engine';
 import type { Task } from '../domain/types';
 import { useApp } from '../state/store';
-import { StageGlyph } from '../world/Journey';
+import { StageGlyph } from '../ui/stage';
 import { PlanDay } from './PlanDay';
 import { TaskEditor } from './TaskEditor';
 

@@ -341,3 +341,21 @@ describe('preț real la achiziție', () => {
     expect(s.goals[0].paidPrice).toBe(30); // nu sunt destule credite
   });
 });
+
+describe('zile în plus', () => {
+  it('adaugi sala și mâine, deși nu e zi de sală', () => {
+    let s = setup([task('sala', { schedule: { kind: 'daily', days: [1, 3, 5] } })]);
+    expect(tasksForDay(s, '2026-11-03')).toHaveLength(0);
+    s = reducer(s, { type: 'task/extraDate', id: 'sala', date: '2026-11-03', add: true });
+    expect(tasksForDay(s, '2026-11-03')).toHaveLength(1);
+    expect(calendarDay(s, '2026-11-03', '2026-11-02')[0].status).toBe('planned');
+    expect(tasksForDay(s, '2026-11-05')).toHaveLength(0);
+  });
+
+  it('o activitate neprogramată poate fi bifată oricând și dă puncte', () => {
+    let s = setup([task('sala', { schedule: { kind: 'daily', days: [1] } })]);
+    s = reducer(s, complete('sala', at(1)));
+    expect(availableCredits(s)).toBe(20);
+    expect(tasksForDay(s, '2026-11-03')[0].status).toBe('done');
+  });
+});

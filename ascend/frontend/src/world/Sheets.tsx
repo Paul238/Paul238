@@ -749,3 +749,13 @@ export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: 
     </Sheet>
   );
 }
+
+/** deschide foaia potrivită pentru tipul etapei */
+export function ItemSheet({ id, onClose, onEdit }: { id: string; onClose: () => void; onEdit: (t: Task) => void }) {
+  const { state } = useApp();
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return null;
+  if (task.kind === 'time') return <TimeSheet taskId={id} onClose={onClose} />;
+  if (task.kind === 'meal') return <MealSheet taskId={id} onClose={onClose} />;
+  return <TaskSheet taskId={id} onClose={onClose} onEdit={onEdit} />;
+}

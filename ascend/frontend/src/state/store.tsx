@@ -15,6 +15,7 @@ import {
 import { uid } from '../domain/id';
 import { characterTitle } from '../domain/leveling';
 import type { AppState, AttributeKey, Character, CustomFood, FoodEntry, Goal, Settings, Task } from '../domain/types';
+import type { MetricKey } from '../domain/metrics';
 import type { Session } from '../services/auth';
 import type { Backend } from '../services/backend';
 import type { Loaded } from '../services/storage';
@@ -55,6 +56,12 @@ function createApi(dispatch: (a: Action) => void) {
     deleteTask: (id: string) => dispatch({ type: 'task/delete', id }),
     toggleSpecial: (id: string) => dispatch({ type: 'task/toggleSpecial', id }),
     skipDate: (id: string, date: string, skip: boolean) => dispatch({ type: 'task/skipDate', id, date, skip }),
+    extraDate: (id: string, date: string, add: boolean) => dispatch({ type: 'task/extraDate', id, date, add }),
+    addMetric: (metric: MetricKey, value: number, value2?: number) => {
+      const at = now();
+      dispatch({ type: 'metric/add', entry: { id: uid('m'), metric, date: keyOf(at), at, value, value2 }, grantId: uid('x') });
+    },
+    deleteMetric: (id: string) => dispatch({ type: 'metric/delete', id }),
     /** întoarce id-ul completării, ca să poată fi anulată din notificare */
     completeTask: (taskId: string, value?: string) => {
       const id = uid('c');

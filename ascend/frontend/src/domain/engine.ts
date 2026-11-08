@@ -1,6 +1,7 @@
 import { ATTRIBUTE_KEYS, emptyAttributeRecord } from './attributes';
 import { addDays, addHours, dateKey, daysBetween, keyOf, weekStart, weekday } from './dates';
 import { attrXpToNext, charXpToNext, levelFromXp, type LevelInfo } from './leveling';
+import { METRIC_MAP, METRIC_XP, plausibleMetric, type MetricEntry } from './metrics';
 import { dayTotals, evaluateTime, hhmmOf, nutritionScore, plausibleFood, targetsFor } from './nutrition';
 import type {
   AppState,
@@ -47,6 +48,7 @@ export function createEmptyState(): AppState {
     xpGrants: [],
     meals: [],
     foods: [],
+    metrics: [],
     days: {},
     settings: { ...DEFAULT_SETTINGS, cooldownHours: { ...DEFAULT_SETTINGS.cooldownHours } },
     meta: { seenAchievements: [] },
@@ -62,6 +64,7 @@ export function normalizeState(raw: Partial<AppState>): AppState {
     // curăță intrările imposibile (ex. 100 kg dintr-un aliment, din cauza unei tastări greșite)
     meals: (raw.meals ?? []).map((m) => ({ ...m, foods: m.foods.filter((f) => plausibleFood(f)) })),
     foods: raw.foods ?? [],
+    metrics: raw.metrics ?? [],
     days: raw.days ?? {},
     settings: {
       ...base.settings,
@@ -103,7 +106,13 @@ function monthlyDayFor(day: number, date: DateKey) {
 }
 
 /** dacă sarcina e programată în ziua dată (fără a ține cont de completări) */
+/** activitate principală: apare pe drumul din ecranul principal */
+export function isMainTask(task: Task): boolean {
+  return task.onRoad ?? (task.kind === 'time' || task.kind === 'meal');
+}
+
 export function isScheduledOn(task: Task, date: DateKey): boolean {
+  if (task.extra?.includes(date)) return true;
   const s = task.schedule;
   if (s.kind === 'daily') return s.days.length === 0 || s.days.includes(weekday(date));
   if (s.kind === 'monthly') return Number(date.slice(8, 10)) === monthlyDayFor(s.day, date);
@@ -135,6 +144,10 @@ export function tasksForDay(state: AppState, date: DateKey, opts: { today?: Date
     if (!completion && keyOf(task.createdAt) > date) continue; // nu exista încă
     if (!completion && task.skip?.includes(date)) continue; // sărită doar în ziua asta
     const s = task.schedule;
+    if (!completion && task.extra?.includes(date)) {
+      items.push({ task, status: 'todo' });
+      continue;
+    }
     if (s.kind === 'weekly') {
       const done = weekCount(state, task.id, date);
       if (done >= s.times && !completion) continue;
@@ -162,7 +175,7 @@ export function calendarDay(state: AppState, date: DateKey, today: DateKey): { i
     .filter((t) => !t.archived && t.skip?.includes(date) && t.schedule.kind !== 'weekly' && isScheduledOn(t, date))
     .map((task) => ({ item: { task, status: 'todo' as const }, status: 'skipped' as PlanStatus }));
   return tasksForDay(state, date, { today })
-    .filter((i) => i.completion || (i.task.schedule.kind !== 'weekly' && !(i.task.schedule.kind === 'once' && !i.task.schedule.due)))
+    .filter((i) => i.completion || i.task.extra?.includes(date) || (i.task.schedule.kind !== 'weekly' && !(i.task.schedule.kind === 'once' && !i.task.schedule.due)))
     .map((item) => ({
       item,
       status: (item.completion ? (item.completion.success === false ? 'missed' : 'done') : date < today ? 'missed' : 'planned') as PlanStatus,
@@ -403,6 +416,9 @@ export type Action =
   | { type: 'task/delete'; id: string }
   | { type: 'task/toggleSpecial'; id: string }
   | { type: 'task/skipDate'; id: string; date: DateKey; skip: boolean }
+  | { type: 'task/extraDate'; id: string; date: DateKey; add: boolean }
+  | { type: 'metric/add'; entry: MetricEntry; grantId: string }
+  | { type: 'metric/delete'; id: string }
   | { type: 'task/complete'; taskId: string; now: string; id: string; value?: string }
   | { type: 'meal/addFood'; date: DateKey; taskId: string; food: FoodEntry; logId: string }
   | { type: 'meal/removeFood'; date: DateKey; taskId: string; foodId: string }
@@ -465,6 +481,36 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'task/archive':
       return { ...state, tasks: state.tasks.map((t) => (t.id === action.id ? { ...t, archived: action.archived } : t)) };
+
+    case 'metric/add': {
+      const def = METRIC_MAP[action.entry.metric];
+      if (!def || !plausibleMetric(def, action.entry.value, action.entry.value2)) return state;
+      const firstToday = !state.metrics.some((e) => e.metric === action.entry.metric && e.date === action.entry.date);
+      return {
+        ...state,
+        metrics: [...state.metrics, action.entry],
+        xpGrants: firstToday
+          ? [...state.xpGrants, { id: action.grantId, at: action.entry.at, attribute: def.attribute, amount: METRIC_XP, label: `Măsurătoare: ${def.label}` }]
+          : state.xpGrants,
+      };
+    }
+
+    case 'metric/delete':
+      return { ...state, metrics: state.metrics.filter((e) => e.id !== action.id) };
+
+    case 'task/extraDate':
+      return {
+        ...state,
+        tasks: state.tasks.map((t) =>
+          t.id === action.id
+            ? {
+                ...t,
+                extra: action.add ? [...new Set([...(t.extra ?? []), action.date])] : (t.extra ?? []).filter((d) => d !== action.date),
+                skip: action.add ? (t.skip ?? []).filter((d) => d !== action.date) : t.skip,
+              }
+            : t,
+        ),
+      };
 
     case 'task/skipDate':
       return {

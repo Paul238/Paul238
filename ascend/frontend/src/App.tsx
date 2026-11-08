@@ -11,48 +11,31 @@ import { CharacterView } from './views/CharacterView';
 import { GoalsView } from './views/GoalsView';
 import { OnboardingView } from './views/OnboardingView';
 import { SettingsView } from './views/SettingsView';
-import { TasksView } from './views/TasksView';
-import { Journey, type PanelId } from './world/Journey';
+import { AppLayout, type AppView } from './views/AppLayout';
+import { HomeView } from './views/HomeView';
+import { PlanView } from './views/PlanView';
+import { TodayList } from './views/TodayList';
 
-const PANELS: PanelId[] = ['tasks', 'goals', 'hero', 'settings'];
+const VIEWS: AppView[] = ['home', 'today', 'plan', 'goals'];
 
-/** panoul deschis peste lume este ținut în URL (#/tasks …), ca butonul Înapoi să-l închidă */
-function useHashPanel(): [PanelId | null, (p: PanelId | null) => void] {
+function useHashView(): [AppView, (v: AppView) => void] {
   const read = () => {
-    const h = window.location.hash.replace('#/', '') as PanelId;
-    return PANELS.includes(h) ? h : null;
+    const h = window.location.hash.replace('#/', '') as AppView;
+    return VIEWS.includes(h) ? h : 'home';
   };
-  const [panel, setPanel] = useState<PanelId | null>(read);
+  const [view, setView] = useState<AppView>(read);
   useEffect(() => {
-    const on = () => setPanel(read());
+    const on = () => setView(read());
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
   return [
-    panel,
-    (p) => {
-      if (p) window.location.hash = `/${p}`;
-      else if (window.location.hash) history.back();
+    view,
+    (v) => {
+      window.location.hash = `/${v}`;
+      window.scrollTo({ top: 0 });
     },
   ];
-}
-
-function Panel({ children, onClose }: { children: ReactNode; onClose: () => void }) {
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.overlay') && onClose();
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, [onClose]);
-  return (
-    <div className="panel-overlay">
-      <div className="panel">
-        <button className="panel-close" onClick={onClose} aria-label="Înapoi în lume">
-          <X size={20} />
-        </button>
-        <div className="panel-content">{children}</div>
-      </div>
-    </div>
-  );
 }
 
 /** după o actualizare automată a serverului, tab-urile deschise află că există o versiune nouă */
@@ -86,19 +69,42 @@ function UpdateBanner() {
   );
 }
 
+function Panel({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.overlay, .sheet-overlay') && onClose();
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
+  return (
+    <div className="panel-overlay">
+      <div className="panel">
+        <button className="panel-close" onClick={onClose} aria-label="Închide">
+          <X size={20} />
+        </button>
+        <div className="panel-content">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 function Shell() {
   const { state, toasts, dismissToast, celebration, closeCelebration } = useApp();
-  const [panel, setPanel] = useHashPanel();
+  const [view, go] = useHashView();
+  const [panel, setPanel] = useState<'settings' | 'stats' | null>(null);
+  const [planKey, setPlanKey] = useState(0);
   if (!state.character) return <OnboardingView />;
   return (
     <>
-      <Journey openPanel={setPanel} />
+      <AppLayout view={view} go={go} openSettings={() => setPanel('settings')}>
+        {view === 'home' && <HomeView go={go} openSettings={() => setPanel('settings')} openStats={() => setPanel('stats')} />}
+        {view === 'today' && <TodayList onPlanTomorrow={() => (setPlanKey((k) => k + 1), go('plan'))} />}
+        {view === 'plan' && <PlanView key={planKey} />}
+        {view === 'goals' && <GoalsView />}
+      </AppLayout>
       {panel && (
         <Panel onClose={() => setPanel(null)}>
-          {panel === 'tasks' && <TasksView />}
-          {panel === 'goals' && <GoalsView />}
-          {panel === 'hero' && <CharacterView />}
           {panel === 'settings' && <SettingsView />}
+          {panel === 'stats' && <CharacterView />}
         </Panel>
       )}
       <Toasts toasts={toasts} onDismiss={dismissToast} />

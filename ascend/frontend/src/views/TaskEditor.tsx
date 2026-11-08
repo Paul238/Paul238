@@ -44,6 +44,7 @@ export function TaskEditor({
   const [schedule, setSchedule] = useState<Schedule>(task?.schedule ?? defaultSchedule ?? { kind: 'daily', days: [] });
   const [special, setSpecial] = useState(task?.special ?? defaultSpecial);
   const [kind, setKind] = useState<TaskKind>(task?.kind ?? 'task');
+  const [onRoad, setOnRoad] = useState<boolean | undefined>(task?.onRoad);
   const [time, setTime] = useState(task?.time ?? '');
   const [timeMode, setTimeMode] = useState<TimeMode>(task?.timeMode ?? 'by');
   const [tolerance, setTolerance] = useState(task?.tolerance ?? 10);
@@ -58,6 +59,7 @@ export function TaskEditor({
     api.saveTask({
       id: task?.id ?? uid('t'),
       kind,
+      onRoad,
       time: time || undefined,
       timeMode: kind === 'time' ? timeMode : undefined,
       tolerance: kind === 'time' ? tolerance : undefined,
@@ -179,6 +181,14 @@ export function TaskEditor({
             <span>pct</span>
           </div>
         </div>
+      </div>
+
+      <div className="row-between" style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+        <div className="col">
+          <span className="strong small">Activitate principală (pe drum)</span>
+          <span className="muted tiny">Apare pe drumul cu omulețul. Celelalte apar doar în lista zilei.</span>
+        </div>
+        <Switch checked={onRoad ?? (kind === 'time' || kind === 'meal')} onChange={setOnRoad} label="Activitate principală" />
       </div>
 
       <div className="field">

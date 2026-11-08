@@ -2,30 +2,30 @@ import {
   AlarmClock,
   BedDouble,
   Briefcase,
+  CalendarDays,
   CalendarPlus,
+  ChevronDown,
   Check,
-  Clock,
   Cloud,
   CloudOff,
   Coins,
-  Crosshair,
   Flame,
   Gift,
-  ListChecks,
   LoaderCircle,
   Plus,
   Settings,
   Sparkles,
+  Sun,
   Sunrise,
   Target,
-  UserRound,
   Utensils,
   X,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
-import { activeBonus, calendarDay, previewReward, tasksForDay, type TodayItem } from '../domain/engine';
+import { activeBonus, calendarDay, isMainTask, previewReward, tasksForDay, type TodayItem } from '../domain/engine';
+import { ActivitySearch } from '../views/ActivitySearch';
 import { characterTitle } from '../domain/leveling';
 import { dayTotals, toMinutes, targetsFor } from '../domain/nutrition';
 import type { Task } from '../domain/types';
@@ -40,7 +40,7 @@ import { addDays } from '../domain/dates';
 import { PlanDay, dayName } from '../views/PlanDay';
 import { BonusSheet, MealSheet, NutritionSheet, RecapSheet, Sheet, TaskSheet, TimeSheet } from './Sheets';
 
-export type PanelId = 'tasks' | 'goals' | 'hero' | 'settings';
+export type PanelId = 'tasks' | 'goals' | 'hero' | 'settings' | 'tomorrow';
 
 type SheetState = { kind: 'item'; id: string } | { kind: 'bonus' } | { kind: 'nutrition' } | { kind: 'recap' } | { kind: 'plan'; date: string } | null;
 
@@ -150,9 +150,10 @@ function trees(width: number, base: number, seed: number, scale: number) {
 /* ------------------------------------------------------------------ */
 
 export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
-  const { state, today, now, derived, api, sync } = useApp();
+  const { state, today, now, derived, api, sync, notify } = useApp();
   const [sheet, setSheet] = useState<SheetState>(null);
   const [editor, setEditor] = useState(false);
+  const [listOpen, setListOpen] = useState(() => window.innerWidth >= 700);
   const [routine, setRoutine] = useState(false);
   const c = state.character!;
 
@@ -169,8 +170,14 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
   const timeline = useMemo(() => [...items].sort(byTime), [items]);
   // pe drum: întâi ce ai strâns (în ordinea în care le-ai făcut), apoi ce urmează, în ordinea orelor
   const order = useMemo(() => new Map(state.completions.map((c, i) => [c.id, i])), [state.completions]);
-  const done = useMemo(() => items.filter((i) => i.completion).sort((a, b) => order.get(a.completion!.id)! - order.get(b.completion!.id)!), [items, order]);
-  const pending = useMemo(() => items.filter((i) => !i.completion).sort(byTime), [items]);
+  // pe drum rămân doar activitățile principale (reperele, mesele și ce marchezi „pe drum”)
+  const mainItems = useMemo(() => {
+    const m = items.filter((i) => isMainTask(i.task));
+    return m.length ? m : items;
+  }, [items]);
+  const done = useMemo(() => mainItems.filter((i) => i.completion).sort((a, b) => order.get(a.completion!.id)! - order.get(b.completion!.id)!), [mainItems, order]);
+  const pending = useMemo(() => mainItems.filter((i) => !i.completion).sort(byTime), [mainItems]);
+  const doneAll = items.filter((i) => i.completion).length;
   const road = [...done, ...pending];
   const n = road.length;
   const allDone = n > 0 && done.length === n;
@@ -594,52 +601,76 @@ export function Journey({ openPanel }: { openPanel: (p: PanelId) => void }) {
         </div>
       </header>
 
-      {/* ---------- desfășurătorul zilei ---------- */}
-      <div className="j-timeline" aria-label="Desfășurătorul zilei">
-        {timeline.map((it) => {
-          const st = stageStatus(it, nowMin);
-          return (
-            <button key={it.task.id} className={`tl-chip ${st}`} onClick={() => setSheet({ kind: 'item', id: it.task.id })} title={it.task.title}>
-              <span className="tl-time">{it.task.time ?? <Clock size={12} />}</span>
-              <span className="tl-icon">
-                <StageGlyph task={it.task} size={14} />
-              </span>
-              <span className="tl-title">{it.task.title}</span>
-              <span className="tl-state">
-                {st === 'done' && <Check size={13} strokeWidth={3} />}
-                {st === 'missed' && <X size={13} strokeWidth={3} />}
-                {it.completion?.value && <i>{it.completion.value}</i>}
-                {st === 'late' && <i>{it.overdue ? 'restanță' : 'întârziat'}</i>}
-              </span>
-            </button>
-          );
-        })}
-        {showNutri && (
-          <button className="tl-chip tl-nutri" onClick={() => setSheet({ kind: 'nutrition' })}>
-            <Utensils size={14} />
-            <span className="tl-title num">
-              {fmt(totals.kcal)}
-              {nutrition ? ` / ${fmt(targetsFor(nutrition).kcal)}` : ''} kcal
-            </span>
-          </button>
-        )}
-        {timeline.length === 0 && <span className="tl-empty">Desfășurătorul zilei e gol.</span>}
-        <button className="tl-chip tl-tomorrow" onClick={() => setSheet({ kind: 'plan', date: addDays(today, 1) })} title="Planifică ziua de mâine">
-          <CalendarPlus size={14} />
-          <span className="tl-title">Mâine · {tomorrowCount}</span>
+      {/* ---------- lista zilei ---------- */}
+      <section className={`daylist ${listOpen ? 'open' : ''}`} aria-label="Activitățile de azi">
+        <button className="daylist-head" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>
+          <span className="grow">
+            <b>Lista de azi</b>
+            <small>
+              {doneAll} din {items.length} făcute{showNutri ? ` · ${fmt(totals.kcal)}${nutrition ? ` / ${fmt(targetsFor(nutrition).kcal)}` : ''} kcal` : ''}
+            </small>
+          </span>
+          <span className="daylist-ring" style={{ ['--p' as string]: items.length ? doneAll / items.length : 0 }}>
+            <span className="num">{items.length ? Math.round((doneAll / items.length) * 100) : 0}%</span>
+          </span>
+          <ChevronDown size={16} className="daylist-chev" />
         </button>
-      </div>
+        <div className="daylist-body">
+          <ActivitySearch mode="log" date={today} onOpen={(t) => setSheet({ kind: 'item', id: t.id })} />
+          <div className="daylist-items">
+            {timeline.map((it) => {
+              const st = stageStatus(it, nowMin);
+              const main = ATTRIBUTE_MAP[it.task.attributes[0] ?? 'discipline'];
+              const quick = (it.task.kind ?? 'task') === 'task';
+              return (
+                <div key={it.task.id} className={`dl-row ${st}`} style={{ ['--c' as string]: main.color }}>
+                  <button
+                    className={`dl-check ${it.completion ? 'on' : ''}`}
+                    aria-label={it.completion ? `Anulează ${it.task.title}` : `Bifează ${it.task.title}`}
+                    onClick={() => {
+                      if (it.completion) return api.undoCompletion(it.completion.id);
+                      if (!quick) return setSheet({ kind: 'item', id: it.task.id });
+                      const reward = previewReward(state, it.task, new Date().toISOString()).credits;
+                      const cid = api.completeTask(it.task.id);
+                      notify({ kind: 'success', title: `+${reward} credite`, body: `${it.task.title} · în rucsac`, action: { label: 'Anulează', run: () => api.undoCompletion(cid) } });
+                    }}
+                  >
+                    {st === 'missed' ? <X size={13} strokeWidth={3} /> : it.completion ? <Check size={13} strokeWidth={3} /> : <StageGlyph task={it.task} size={13} />}
+                  </button>
+                  <button className="dl-main" onClick={() => setSheet({ kind: 'item', id: it.task.id })}>
+                    <b>{it.task.title}</b>
+                    <small>
+                      {it.task.time ?? 'oricând'}
+                      {it.completion?.value ? ` · notat ${it.completion.value}` : ''}
+                      {st === 'late' ? (it.overdue ? ' · restanță' : ' · întârziat') : ''}
+                      {it.task.extra?.includes(today) ? ' · adăugat azi' : ''}
+                    </small>
+                  </button>
+                  <span className="dl-pts num">+{it.completion?.credits ?? it.task.points}</span>
+                </div>
+              );
+            })}
+            {timeline.length === 0 && <p className="muted small" style={{ padding: '8px 4px' }}>Nimic programat azi. Caută mai sus ce ai făcut sau planifică din Calendar.</p>}
+          </div>
+          {showNutri && (
+            <button className="dl-nutri" onClick={() => setSheet({ kind: 'nutrition' })}>
+              <Utensils size={14} /> Nutriția zilei · {fmt(totals.kcal)}
+              {nutrition ? ` / ${fmt(targetsFor(nutrition).kcal)}` : ''} kcal
+            </button>
+          )}
+        </div>
+      </section>
 
       {bonus?.revealed && <BonusPill expiresAt={bonus.expiresAt} title={bonus.taskTitle} mult={bonus.multiplier} onTap={() => setSheet({ kind: 'item', id: bonus.taskId })} />}
 
       <nav className="dock">
-        <DockBtn icon={<ListChecks size={20} />} label="Sarcini" onClick={() => openPanel('tasks')} />
-        <DockBtn icon={<Target size={20} />} label="Vârfuri" onClick={() => openPanel('goals')} />
-        <button className="dock-plus" onClick={() => setEditor(true)} aria-label="Etapă nouă">
+        <DockBtn icon={<Sun size={20} />} label="Azi" onClick={() => setDrag(0)} active />
+        <DockBtn icon={<CalendarPlus size={20} />} label={`Mâine · ${tomorrowCount}`} onClick={() => openPanel('tomorrow')} />
+        <button className="dock-plus" onClick={() => setEditor(true)} aria-label="Activitate nouă">
           <Plus size={26} strokeWidth={2.5} />
         </button>
-        <DockBtn icon={<UserRound size={20} />} label="Erou" onClick={() => openPanel('hero')} />
-        <DockBtn icon={<Crosshair size={20} />} label="Drumul" onClick={() => setDrag(0)} active={Math.abs(drag) < 5} />
+        <DockBtn icon={<CalendarDays size={20} />} label="Calendar" onClick={() => openPanel('tasks')} />
+        <DockBtn icon={<Target size={20} />} label="Vârfuri" onClick={() => openPanel('goals')} />
       </nav>
 
       {/* ---------- foi de jos ---------- */}
