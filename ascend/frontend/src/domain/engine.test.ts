@@ -4,10 +4,10 @@ import {
   availableCredits,
   calendarDay,
   createEmptyState,
-  currentStreak,
   goalDeadlinePlan,
   goalProgress,
   goalRequiredCredits,
+  MONEY_TASK_ID,
   reducer,
   tasksForDay,
   type Action,
@@ -29,7 +29,6 @@ function task(id: string, patch: Partial<Task> = {}): Task {
     points: 20,
     attributes: ['intellect', 'career'],
     schedule: { kind: 'daily', days: [] },
-    special: false,
     archived: false,
     createdAt: at(0, 8),
     ...patch,
@@ -37,13 +36,15 @@ function task(id: string, patch: Partial<Task> = {}): Task {
 }
 
 function setup(tasks: Task[]): AppState {
-  return reducer(createEmptyState(), {
+  const s = reducer(createEmptyState(), {
     type: 'onboard',
     character: { name: 'Test', color: '#000', createdAt: at(0, 8) },
     tasks,
     goals: [],
     settings: {},
   });
+  // sarcina de sistem „Evidența banilor” e testată separat
+  return reducer(s, { type: 'task/archive', id: MONEY_TASK_ID, archived: true });
 }
 
 const run = (s: AppState, ...actions: Action[]) => actions.reduce(reducer, s);
@@ -80,20 +81,6 @@ describe('finalizarea sarcinilor', () => {
     const s = setup([task('l', { schedule: { kind: 'daily', days: [1] } })]); // doar luni
     expect(tasksForDay(s, '2026-11-02')).toHaveLength(1);
     expect(tasksForDay(s, '2026-11-03')).toHaveLength(0);
-  });
-});
-
-describe('serii (streak)', () => {
-  it('zilele libere nu întrerup seria', () => {
-    let s = setup([task('a')]);
-    s = reducer(s, { type: 'settings/update', patch: { restDays: [3] } }); // miercuri liber
-    s = run(s, complete('a', at(0)), complete('a', at(1)), complete('a', at(3))); // L, Ma, J
-    expect(currentStreak(s, '2026-11-05').days).toBe(3);
-  });
-
-  it('o zi ratată resetează seria', () => {
-    const s = run(setup([task('a')]), complete('a', at(0)), complete('a', at(2)));
-    expect(currentStreak(s, '2026-11-04').days).toBe(1);
   });
 });
 
@@ -141,22 +128,6 @@ describe('obiective', () => {
   it('creditele necesare respectă cursul lei/credit', () => {
     const s = setup([]);
     expect(goalRequiredCredits({ price: 6000 } as never, { ...s.settings, leiPerCredit: 2 })).toBe(3000);
-  });
-});
-
-describe('scuturi de serie', () => {
-  it('după 7 zile active, o zi ratată nu rupe seria', () => {
-    let s = setup([task('a')]);
-    for (let i = 0; i < 7; i++) s = reducer(s, complete('a', at(i)));
-    // ziua 7 ratată, ziua 8 activă
-    s = reducer(s, complete('a', at(8)));
-    expect(currentStreak(s, '2026-11-10').days).toBe(8);
-    expect(currentStreak(s, '2026-11-10').shields).toBe(0);
-  });
-
-  it('fără scut, o zi ratată resetează seria', () => {
-    const s = run(setup([task('a')]), complete('a', at(0)), complete('a', at(1)), complete('a', at(3)));
-    expect(currentStreak(s, '2026-11-05').days).toBe(1);
   });
 });
 

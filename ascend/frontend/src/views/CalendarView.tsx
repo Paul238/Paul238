@@ -1,6 +1,6 @@
 import { Check, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ATTRIBUTE_MAP } from '../domain/attributes';
+import { attributeDef } from '../domain/attributes';
 import { addDays, dateKey, parseKey, weekStart } from '../domain/dates';
 import { calendarDay, weekCount, type PlanStatus, type TodayItem } from '../domain/engine';
 import type { Task } from '../domain/types';
@@ -87,7 +87,7 @@ export function CalendarView() {
             const n = weekCount(state, t.id, days[0]);
             const target = t.schedule.kind === 'weekly' ? t.schedule.times : 1;
             return (
-              <button key={t.id} className={`cal-flex-chip ${n >= target ? 'done' : ''}`} onClick={() => setEditor({ task: t })} style={{ ['--c' as string]: ATTRIBUTE_MAP[t.attributes[0] ?? 'discipline'].color }}>
+              <button key={t.id} className={`cal-flex-chip ${n >= target ? 'done' : ''}`} onClick={() => setEditor({ task: t })} style={{ ['--c' as string]: attributeDef(t.attributes[0] ?? 'discipline').color }}>
                 <StageGlyph task={t} size={13} />
                 {t.title}
                 <b className="num">
@@ -137,7 +137,7 @@ export function CalendarView() {
                 <span className="cal-cell-n num">{Number(d.slice(8))}</span>
                 <span className="cal-cell-items">
                   {items.filter((x) => x.status !== 'skipped').slice(0, 3).map(({ item, status }) => (
-                    <span key={item.task.id} className={`cal-mini ${status}`} style={{ ['--c' as string]: ATTRIBUTE_MAP[item.task.attributes[0] ?? 'discipline'].color }}>
+                    <span key={item.task.id} className={`cal-mini ${status}`} style={{ ['--c' as string]: attributeDef(item.task.attributes[0] ?? 'discipline').color }}>
                       {item.task.title}
                     </span>
                   ))}
@@ -185,7 +185,7 @@ export function CalendarView() {
 function PlanChip({ item, status, onClick, wide }: { item: TodayItem; status: PlanStatus; onClick: () => void; wide?: boolean }) {
   const t = item.task;
   return (
-    <button className={`plan-chip ${status} ${wide ? 'wide' : ''}`} onClick={onClick} style={{ ['--c' as string]: ATTRIBUTE_MAP[t.attributes[0] ?? 'discipline'].color }} title={t.title}>
+    <button className={`plan-chip ${status} ${wide ? 'wide' : ''}`} onClick={onClick} style={{ ['--c' as string]: attributeDef(t.attributes[0] ?? 'discipline').color }} title={t.title}>
       <span className="plan-chip-icon">
         {status === 'done' ? <Check size={12} strokeWidth={3} /> : status === 'missed' ? <X size={12} strokeWidth={3} /> : <StageGlyph task={t} size={12} />}
       </span>

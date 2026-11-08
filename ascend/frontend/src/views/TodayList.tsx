@@ -1,6 +1,6 @@
 import { Check, ListPlus, Moon, Utensils, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ATTRIBUTE_MAP } from '../domain/attributes';
+import { attributeDef } from '../domain/attributes';
 import { creditsOn, previewReward, tasksForDay, type TodayItem } from '../domain/engine';
 import { dayTotals, targetsFor, toMinutes } from '../domain/nutrition';
 import type { Task } from '../domain/types';
@@ -100,7 +100,7 @@ export function TodayList({ onPlanTomorrow }: { onPlanTomorrow: () => void }) {
           <div className="today-items">
             {list.map((it) => {
               const st = stageStatus(it, nowMin);
-              const a = ATTRIBUTE_MAP[it.task.attributes[0] ?? 'discipline'];
+              const a = attributeDef(it.task.attributes[0] ?? 'discipline');
               return (
                 <div key={it.task.id} className={`trow ${st}`} style={{ ['--c' as string]: a.color }}>
                   <button className={`tcheck ${it.completion ? 'on' : ''}`} onClick={() => check(it)} aria-label={it.completion ? `Anulează ${it.task.title}` : `Bifează ${it.task.title}`}>

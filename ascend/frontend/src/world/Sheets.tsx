@@ -1,14 +1,13 @@
-import { Check, Lock, Pencil, Plus, Search, Sparkles, Trash2, Undo2, X } from 'lucide-react';
+import { Check, Lock, Pencil, Plus, Search, Trash2, Undo2, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ATTRIBUTE_MAP } from '../domain/attributes';
-import { activeBonus, previousMeal, previewReward, recentFoods, scheduleLabel, tasksForDay, weekCount } from '../domain/engine';
-import { FOOD_DB, MAX_GRAMS, MAX_KCAL, WARN_GRAMS, plausibleFood, dayTotals, evaluateTime, fromMinutes, hhmmOf, nutritionScore, scaleFood, sumFoods, targetsFor, toMinutes } from '../domain/nutrition';
+import { attributeDef } from '../domain/attributes';
+import { previousMeal, previewReward, recentFoods, scheduleLabel, tasksForDay, weekCount } from '../domain/engine';
+import { FOOD_DB, MAX_GRAMS, MAX_KCAL, WARN_GRAMS, mealScore, plausibleFood, dayTotals, evaluateTime, fromMinutes, hhmmOf, nutritionScore, scaleFood, sumFoods, targetsFor, toMinutes } from '../domain/nutrition';
 import type { AttributeKey, MacroTargets, Task } from '../domain/types';
 import { useApp } from '../state/store';
 import { Burst } from '../ui/Art';
 import { fmt } from '../ui/format';
 import { AttrTag } from '../ui/icons';
-import { BonusCard } from '../views/BonusCard';
 
 export function Sheet({ onClose, children, accent }: { onClose: () => void; children: ReactNode; accent?: string }) {
   const [closing, setClosing] = useState(false);
@@ -38,8 +37,8 @@ function XpChips({ xp }: { xp: Partial<Record<AttributeKey, number>> }) {
   return (
     <div className="col" style={{ gap: 6, alignItems: 'flex-end' }}>
       {Object.entries(xp).map(([k, v]) => (
-        <span key={k} className="xp-chip" style={{ ['--c' as string]: ATTRIBUTE_MAP[k as AttributeKey].color }}>
-          +{v} XP {ATTRIBUTE_MAP[k as AttributeKey].label}
+        <span key={k} className="xp-chip" style={{ ['--c' as string]: attributeDef(k as AttributeKey).color }}>
+          +{v} XP {attributeDef(k as AttributeKey).label}
         </span>
       ))}
     </div>
@@ -53,12 +52,10 @@ export function TaskSheet({ taskId, onClose, onEdit }: { taskId: string; onClose
   const task = state.tasks.find((t) => t.id === taskId);
   const [burst, setBurst] = useState(false);
   const completion = state.completions.find((c) => c.taskId === taskId && c.date === today);
-  const colors = useMemo(() => [...(task?.attributes ?? []).map((a) => ATTRIBUTE_MAP[a].color), '#ffd36b', '#ff7a59'], [task]);
+  const colors = useMemo(() => [...(task?.attributes ?? []).map((a) => attributeDef(a).color), '#ffd36b', '#ff7a59'], [task]);
   if (!task) return null;
   const reward = previewReward(state, task, now);
-  const bonus = activeBonus(state, now);
-  const isBonus = bonus?.taskId === task.id && bonus.revealed;
-  const main = ATTRIBUTE_MAP[task.attributes[0] ?? 'discipline'];
+  const main = attributeDef(task.attributes[0] ?? 'discipline');
   const done = !!completion;
   const week = task.schedule.kind === 'weekly' ? weekCount(state, task.id, today) : null;
 
@@ -66,9 +63,9 @@ export function TaskSheet({ taskId, onClose, onEdit }: { taskId: string; onClose
     setBurst(true);
     const cid = api.completeTask(task!.id);
     notify({
-      kind: isBonus ? 'bonus' : 'success',
+      kind: 'success',
       title: `+${reward.credits} credite`,
-      body: isBonus ? 'Provocare cucerită!' : `${task!.title} · în rucsac`,
+      body: task!.title,
       action: { label: 'Anulează', run: () => api.undoCompletion(cid) },
     });
     setTimeout(onClose, 700);
@@ -77,16 +74,10 @@ export function TaskSheet({ taskId, onClose, onEdit }: { taskId: string; onClose
   return (
     <Sheet onClose={onClose} accent={main.color}>
       <div className="sheet-eyebrow">
-        {isBonus ? (
-          <span style={{ color: 'var(--gold)' }}>
-            <Sparkles size={13} /> Provocare ×{bonus!.multiplier}
-          </span>
-        ) : (
-          <span>
-            Etapă · {scheduleLabel(task)}
-            {task.time ? ` · în jur de ${task.time}` : ''}
-          </span>
-        )}
+        <span>
+          {scheduleLabel(task)}
+          {task.time ? ` · în jur de ${task.time}` : ''}
+        </span>
       </div>
       <h2 className="sheet-title">{task.title}</h2>
       <div className="row wrap" style={{ gap: 12 }}>
@@ -105,11 +96,7 @@ export function TaskSheet({ taskId, onClose, onEdit }: { taskId: string; onClose
         <div>
           <div className="eyebrow-label">Recompensă</div>
           <div className="sheet-credits num">+{done ? completion!.credits : reward.credits}</div>
-          <div className="muted small">
-            credite
-            {!done && reward.streakMultiplier > 1 && ` · serie +${Math.round((reward.streakMultiplier - 1) * 100)}%`}
-            {!done && reward.bonusMultiplier > 1 && ` · ×${reward.bonusMultiplier}`}
-          </div>
+          <div className="muted small">credite</div>
         </div>
         <XpChips xp={done ? completion!.xp : reward.xp} />
       </div>
@@ -117,10 +104,10 @@ export function TaskSheet({ taskId, onClose, onEdit }: { taskId: string; onClose
       <div className="sheet-actions">
         {done ? (
           <button className="btn btn-block" style={{ height: 48 }} onClick={() => (api.undoCompletion(completion!.id), onClose())}>
-            <Undo2 size={17} /> Scoate din rucsac (anulează)
+            <Undo2 size={17} /> Anulează bifarea
           </button>
         ) : (
-          <button className={`btn btn-block ${isBonus ? 'btn-gold' : 'btn-primary'} sheet-cta`} onClick={complete} disabled={burst}>
+          <button className={`btn btn-block btn-primary sheet-cta`} onClick={complete} disabled={burst}>
             <span style={{ position: 'relative', display: 'inline-flex' }}>
               <Check size={20} strokeWidth={3} />
               {burst && <Burst colors={colors} />}
@@ -153,7 +140,7 @@ export function TimeSheet({ taskId, onClose }: { taskId: string; onClose: () => 
   const mode = task.timeMode ?? 'by';
   const tol = task.tolerance ?? 0;
   const preview = evaluateTime(task.time, mode, tol, value);
-  const main = ATTRIBUTE_MAP[task.attributes[0] ?? 'discipline'];
+  const main = attributeDef(task.attributes[0] ?? 'discipline');
   const rule =
     mode === 'by' ? `cel târziu la ${task.time}${tol ? ` (toleranță ${tol} min)` : ''}` : mode === 'after' ? `cel devreme la ${task.time}${tol ? ` (toleranță ${tol} min)` : ''}` : `doar notez ora (reper ${task.time})`;
 
@@ -297,7 +284,8 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
     setAmountRaw(v);
     setFresh(true);
   };
-  const [custom, setCustom] = useState(false);
+  // implicit: scrii tu denumirea, caloriile și macro; căutarea în listă e opțională
+  const [custom, setCustom] = useState(true);
   const [cf, setCf] = useState({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   const [saveCustom, setSaveCustom] = useState(true);
 
@@ -317,6 +305,9 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
   const lotOf = !tooMuch && grams > WARN_GRAMS;
   const computed = pick ? (pick.per === '100g' ? scaleFood(pick, amt) : scaleFood(pick, amt * 100)) : null;
   const mealTotals = sumFoods(foods);
+  const fit = mealScore(mealTotals, task.target);
+  const expected = Math.round(task.points * (fit?.score ?? 1));
+  const editable = !closed && !completion;
 
   function addPicked() {
     if (!pick || !computed || amt <= 0 || tooMuch) return;
@@ -331,7 +322,6 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
     api.addFood(today, taskId, { name: cf.name.trim(), ...v });
     if (saveCustom) api.saveFood({ name: cf.name.trim(), per: 'portion', ...v });
     setCf({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
-    setCustom(false);
   }
 
   return (
@@ -345,6 +335,27 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
         )}
       </div>
       <h2 className="sheet-title">{task.title}</h2>
+      {task.target && fit && (
+        <div className={`meal-target ${fit.over.length ? 'over' : ''}`}>
+          <div className="row-between small">
+            <span className="muted">Ținta mesei</span>
+            <span className="num">
+              {[task.target.kcal && `${task.target.kcal} kcal`, task.target.protein && `P ${task.target.protein} g`, task.target.carbs && `C ${task.target.carbs} g`, task.target.fat && `G ${task.target.fat} g`].filter(Boolean).join(' · ')}
+            </span>
+          </div>
+          {foods.length > 0 && (
+            <div className="small mt-8">
+              {fit.over.length === 0 ? (
+                <span style={{ color: 'var(--success)' }}>Te încadrezi · +{expected} credite</span>
+              ) : (
+                <span style={{ color: 'var(--warning)' }}>
+                  Ai depășit {fit.over.map((k) => ({ kcal: 'caloriile', protein: 'proteinele', carbs: 'carbohidrații', fat: 'grăsimile' })[k]).join(', ')} · încadrare {Math.round(fit.score * 100)}% · +{expected} credite
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {foods.length > 0 && (
         <div className="food-list">
@@ -360,7 +371,7 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
                 </div>
               </div>
               <span className="num strong">{fmt(f.kcal)} kcal</span>
-              {!closed && (
+              {editable && (
                 <button className="btn btn-ghost btn-icon" onClick={() => api.removeFood(today, taskId, f.id)} aria-label="Șterge">
                   <Trash2 size={14} />
                 </button>
@@ -377,7 +388,7 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
         </div>
       )}
 
-      {!closed && !custom && (
+      {editable && !custom && (
         <div className="food-add">
           {!pick ? (
             <>
@@ -432,7 +443,7 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
                 {options.length === 0 && <span className="muted small">Nu am găsit „{q}”. Adaugă-l ca aliment propriu.</span>}
               </div>
               <button className="btn btn-sm btn-ghost mt-8" onClick={() => (setCustom(true), setCf((c) => ({ ...c, name: q })))}>
-                <Plus size={14} /> Aliment propriu (introduci valorile)
+                <Plus size={14} /> Scriu eu denumirea, caloriile și macro
               </button>
             </>
           ) : (
@@ -491,15 +502,15 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
         </div>
       )}
 
-      {!closed && custom && (
+      {editable && custom && (
         <div className="food-pick">
           <div className="row-between">
-            <b>Aliment propriu (pe porția consumată)</b>
+            <b>Ce ai mâncat</b>
             <button className="btn btn-ghost btn-sm" onClick={() => setCustom(false)}>
-              Înapoi
+              <Search size={13} /> Caută în listă
             </button>
           </div>
-          <input className="input mt-8" placeholder="Denumire (ex. Ciorbă de burtă)" value={cf.name} onChange={(e) => setCf({ ...cf, name: e.target.value })} />
+          <input className="input mt-8" placeholder="Denumire (ex. Omletă cu brânză)" autoFocus={foods.length === 0} value={cf.name} onChange={(e) => setCf({ ...cf, name: e.target.value })} />
           <div className="grid grid-4 mt-8" style={{ gap: 8 }}>
             {(
               [
@@ -519,12 +530,18 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
             <input type="checkbox" checked={saveCustom} onChange={(e) => setSaveCustom(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
             Salvează în alimentele mele, ca să-l găsesc data viitoare
           </label>
+          {prev && foods.length === 0 && (
+            <button className="btn btn-sm btn-ghost mt-8" onClick={() => prev.foods.forEach(({ id: _id, ...f }) => api.addFood(today, taskId, f))}>
+              Repetă ce ai mâncat pe {prev.date.split('-').reverse().slice(0, 2).join('.')} ({fmt(sumFoods(prev.foods).kcal)} kcal)
+            </button>
+          )}
           {Number(cf.kcal) > MAX_KCAL && <div className="error mt-8">Peste {fmt(MAX_KCAL)} kcal pentru o porție — verifică numărul.</div>}
           <button className="btn btn-primary btn-block mt-12" onClick={addCustom} disabled={!cf.name.trim() || !(Number(cf.kcal) > 0) || Number(cf.kcal) > MAX_KCAL}>
             <Plus size={16} /> Adaugă
           </button>
         </div>
       )}
+      {completion && !closed && <p className="muted tiny mt-8">Ca să modifici ce ai notat, anulează bifarea.</p>}
 
       {profile && (
         <div className="mt-16">
@@ -544,11 +561,11 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
             disabled={foods.length === 0 || closed}
             onClick={() => {
               const cid = api.completeTask(task.id);
-              notify({ kind: 'success', title: `${task.title} notat`, body: `${fmt(mealTotals.kcal)} kcal în rucsac.`, action: { label: 'Anulează', run: () => api.undoCompletion(cid) } });
+              notify({ kind: 'success', title: `${task.title} notat`, body: `${fmt(mealTotals.kcal)} kcal notate.`, action: { label: 'Anulează', run: () => api.undoCompletion(cid) } });
               setTimeout(onClose, 500);
             }}
           >
-            <Check size={20} strokeWidth={3} /> {foods.length === 0 ? 'Adaugă ce ai mâncat' : `Am mâncat · +${task.points}`}
+            <Check size={20} strokeWidth={3} /> {foods.length === 0 ? 'Adaugă ce ai mâncat' : `Am mâncat · +${expected}`}
           </button>
         )}
       </div>
@@ -630,26 +647,7 @@ export function NutritionSheet({ onClose, onSetup }: { onClose: () => void; onSe
   );
 }
 
-/* ---------------- provocarea dezvăluită ---------------- */
-
-export function BonusSheet({ onClose }: { onClose: () => void }) {
-  const { state, now } = useApp();
-  const bonus = activeBonus(state, now) ?? state.bonuses[state.bonuses.length - 1];
-  if (!bonus) return null;
-  return (
-    <Sheet onClose={onClose} accent="#ffd36b">
-      <div className="sheet-eyebrow" style={{ color: 'var(--gold)' }}>
-        <Sparkles size={13} /> Ai găsit un cufăr pe drum
-      </div>
-      <div className="reveal-anim">
-        <BonusCard bonus={bonus} />
-      </div>
-      <p className="muted small mt-12">Etapa strălucește acum auriu pe drum. O poți bifa de acolo sau de aici.</p>
-    </Sheet>
-  );
-}
-
-/* ---------------- rezumatul zilei (tabăra de seară) ---------------- */
+/* ---------------- rezumatul zilei ---------------- */
 
 export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: () => void; onNutrition: () => void; onPlanTomorrow: () => void }) {
   const { state, api, today } = useApp();
@@ -663,18 +661,18 @@ export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: 
   const xp: Partial<Record<AttributeKey, number>> = {};
   for (const c of todays) for (const [k, v] of Object.entries(c.xp)) xp[k as AttributeKey] = (xp[k as AttributeKey] ?? 0) + (v ?? 0);
   const checks = todays.filter((c) => c.value);
-  const totalXp = Object.values(xp).reduce((a, b) => a + (b ?? 0), 0);
+  const totalXp = Object.values(xp).reduce<number>((a, b) => a + (b ?? 0), 0);
   const left = tasksForDay(state, today, { today }).filter((i) => !i.completion).length;
   const dateLabel = new Date().toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
     <Sheet onClose={onClose} accent="#ff9a4d">
-      <div className="sheet-eyebrow">Tabăra de seară · {dateLabel}</div>
+      <div className="sheet-eyebrow">{dateLabel}</div>
       <h2 className="sheet-title">Rezumatul zilei</h2>
       <div className="recap-stats">
         <div>
           <span className="recap-big num">{todays.length}</span>
-          <small>etape în rucsac</small>
+          <small>activități bifate</small>
         </div>
         <div>
           <span className="recap-big num gold">+{fmt(credits)}</span>
@@ -691,8 +689,8 @@ export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: 
           <div className="eyebrow-label mt-16">Ai crescut azi</div>
           <div className="row wrap mt-8" style={{ gap: 6 }}>
             {Object.entries(xp).map(([k, v]) => (
-              <span key={k} className="xp-chip" style={{ ['--c' as string]: ATTRIBUTE_MAP[k as AttributeKey].color }}>
-                +{v} XP {ATTRIBUTE_MAP[k as AttributeKey].label}
+              <span key={k} className="xp-chip" style={{ ['--c' as string]: attributeDef(k as AttributeKey).color }}>
+                +{v} XP {attributeDef(k as AttributeKey).label}
               </span>
             ))}
           </div>
@@ -728,7 +726,7 @@ export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: 
       )}
 
       <p className="muted small mt-16">
-        {left > 0 ? `${left} etape rămân pentru altă zi — e în regulă. Mâine drumul începe din nou de acasă.` : 'Ai strâns tot ce ți-ai propus azi. Odihnește-te bine.'}
+        {left > 0 ? `${left} activități au rămas nebifate azi — le poți muta pe altă zi din Plan.` : 'Ai strâns tot ce ți-ai propus azi. Odihnește-te bine.'}
       </p>
 
       <div className="sheet-actions">
@@ -749,7 +747,7 @@ export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: 
   );
 }
 
-/** deschide foaia potrivită pentru tipul etapei */
+/** deschide foaia potrivită pentru tipul activității */
 export function ItemSheet({ id, onClose, onEdit }: { id: string; onClose: () => void; onEdit: (t: Task) => void }) {
   const { state } = useApp();
   const task = state.tasks.find((t) => t.id === id);

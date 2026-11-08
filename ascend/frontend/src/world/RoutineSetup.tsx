@@ -113,7 +113,7 @@ export function RoutineSetup({ onClose }: { onClose: () => void }) {
     const tasks = planToTasks(plan, existing);
     tasks.forEach((t) => api.saveTask(t));
     if (useNutri) api.updateSettings({ nutrition: nutri });
-    notify({ kind: 'success', title: 'Ziua ta e pe drum', body: tasks.length ? `${tasks.length} repere și mese adăugate.` : 'Nimic nou de adăugat.' });
+    notify({ kind: 'success', title: 'Ziua ta e în program', body: tasks.length ? `${tasks.length} repere și mese adăugate.` : 'Nimic nou de adăugat.' });
     onClose();
   }
 
@@ -128,12 +128,12 @@ export function RoutineSetup({ onClose }: { onClose: () => void }) {
             Renunță
           </button>
           <button className="btn btn-primary" onClick={save}>
-            Pune-le pe drum
+            Adaugă-le în program
           </button>
         </>
       }
     >
-      <p className="text-2">Spune-mi cum arată de obicei ziua ta. Fiecare reper devine o etapă pe drum: la ore notezi ora reală, la mese ce ai mâncat.</p>
+      <p className="text-2">Spune-mi cum arată de obicei ziua ta. Fiecare reper apare în lista zilei: la ore notezi ora reală, la mese ce ai mâncat.</p>
       <DayPlanForm value={plan} onChange={setPlan} existing={existing} />
       <div className="plan-card" style={{ ['--c' as string]: '#3cc48d' }}>
         <div className="plan-head">

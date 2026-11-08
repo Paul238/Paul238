@@ -1,6 +1,6 @@
-import { AlarmClock, Cloud, Download, HardDrive, KeyRound, LogOut, Monitor, Moon, Palette, Pencil, Plus, Shield, Sun, Trash2, Upload, User, Utensils, Wallet } from 'lucide-react';
+import { AlarmClock, Cloud, Download, HardDrive, KeyRound, LogOut, Monitor, Moon, Palette, Pencil, Plus, RotateCcw, Shield, Sun, Trash2, Upload, User, Utensils, Wallet } from 'lucide-react';
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { averageDailyCredits, createEmptyState, normalizeState, scheduleLabel } from '../domain/engine';
+import { averageDailyCredits, createEmptyState, normalizeState, scheduleLabel, type ResetParts } from '../domain/engine';
 import { DEFAULT_NUTRITION, targetsFor } from '../domain/nutrition';
 import { AVATAR_COLORS } from '../domain/templates';
 import type { GoalMode, Task } from '../domain/types';
@@ -30,6 +30,7 @@ export function SettingsView() {
   const [routineOpen, setRoutineOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const routine = state.tasks.filter((t) => !t.archived && (t.kind === 'time' || t.kind === 'meal')).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
   const pace = averageDailyCredits(state, today);
@@ -69,7 +70,7 @@ export function SettingsView() {
       <div className="page-head">
         <div>
           <h1>Setări</h1>
-          <p>Toate regulile jocului, pe înțelesul tuturor. Modificările se salvează automat.</p>
+          <p>Toate regulile aplicației, pe înțelesul tuturor. Modificările se salvează automat.</p>
         </div>
       </div>
 
@@ -127,7 +128,7 @@ export function SettingsView() {
           )}
 
           {section === 'day' && (
-            <Section title="Ziua mea" desc="Reperele cu oră și mesele care apar în fiecare zi pe drum și în desfășurător.">
+            <Section title="Ziua mea" desc="Reperele cu oră și mesele care apar în fiecare zi în desfășurător.">
               {routine.length === 0 ? (
                 <div className="settings-empty">
                   <Palette size={28} />
@@ -152,7 +153,7 @@ export function SettingsView() {
                         <button className="btn btn-ghost btn-icon" onClick={() => setEditing(t)} aria-label={`Editează ${t.title}`}>
                           <Pencil size={15} />
                         </button>
-                        <button className="btn btn-ghost btn-icon" onClick={() => api.archiveTask(t.id, true)} aria-label={`Scoate ${t.title}`} title="Scoate de pe drum (arhivează)">
+                        <button className="btn btn-ghost btn-icon" onClick={() => api.archiveTask(t.id, true)} aria-label={`Scoate ${t.title}`} title="Scoate din program (arhivează)">
                           <Trash2 size={15} />
                         </button>
                       </div>
@@ -167,7 +168,7 @@ export function SettingsView() {
           )}
 
           {section === 'nutrition' && (
-            <Section title="Nutriție" desc="Pe baza profilului calculez țintele zilnice. Seara primești un scor după cât de bine te-ai încadrat (±10% = perfect).">
+            <Section title="Nutriție" desc="Ținta fiecărei mese (kcal și macro) o setezi la masa respectivă, din Ziua mea → editează masa. Dacă o depășești, primești mai puține credite. Profilul de mai jos e opțional: calculează ținta pe toată ziua.">
               <Row title="Ținte de nutriție" desc={s.nutrition ? 'Active' : 'Oprite — mesele se pot nota oricum, fără scor.'}>
                 <Switch checked={!!s.nutrition} onChange={(v) => api.updateSettings({ nutrition: v ? DEFAULT_NUTRITION : undefined })} label="Ținte de nutriție" />
               </Row>
@@ -238,9 +239,19 @@ export function SettingsView() {
                   <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importData(e.target.files[0])} />
                 </div>
               </Row>
-              <Row title="Zona periculoasă" desc="Șterge personajul, sarcinile, creditele și obiectivele.">
-                <button className="btn btn-danger" onClick={() => setConfirmReset(true)}>
-                  Resetează tot
+              <Row title="Propuneri ascunse" desc={state.meta.dismissed.length ? `${state.meta.dismissed.length} propuneri ascunse cu „×”.` : 'Nicio propunere ascunsă.'}>
+                <button className="btn" disabled={!state.meta.dismissed.length} onClick={() => (api.restoreSuggestions(), notify({ kind: 'success', title: 'Propunerile au revenit' }))}>
+                  <RotateCcw size={15} /> Readu-le
+                </button>
+              </Row>
+              <Row title="Pornește de la zero" desc="Alegi ce se șterge: progresul, obiectivele, măsurătorile, banii sau programul. Înainte descarc o copie de siguranță.">
+                <button className="btn btn-danger" onClick={() => setResetOpen(true)}>
+                  <RotateCcw size={15} /> Pornește de la zero
+                </button>
+              </Row>
+              <Row title="Șterge tot" desc="Contul rămâne, dar personajul și toate datele dispar.">
+                <button className="btn btn-ghost" onClick={() => setConfirmReset(true)}>
+                  <Trash2 size={15} /> Șterge tot
                 </button>
               </Row>
             </Section>
@@ -249,6 +260,7 @@ export function SettingsView() {
       </div>
 
       {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
+      {resetOpen && <ResetModal onClose={() => setResetOpen(false)} onBackup={exportData} />}
       {routineOpen && <RoutineSetup onClose={() => setRoutineOpen(false)} />}
       {editing && <TaskEditor task={editing} onClose={() => setEditing(null)} />}
       {confirmReset && (
@@ -364,6 +376,61 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
         {error && <div className="error">{error}</div>}
         <button hidden type="submit" />
       </form>
+    </Modal>
+  );
+}
+
+const RESET_PARTS: { key: keyof ResetParts; label: string; desc: string; on: boolean }[] = [
+  { key: 'progress', label: 'Progresul', desc: 'bifările, creditele, XP-ul și nivelurile laturilor', on: true },
+  { key: 'goals', label: 'Obiectivele', desc: 'obiectivele și cumpărările din credite', on: true },
+  { key: 'health', label: 'Măsurătorile și mesele', desc: 'greutate, tensiune, glicemie… și ce ai mâncat', on: true },
+  { key: 'money', label: 'Banii', desc: 'cheltuieli, venituri, plăți recurente și lista de cumpărături', on: false },
+  { key: 'program', label: 'Programul', desc: 'toate sarcinile, reperele și mesele din program', on: false },
+];
+
+/** „Pornește de la zero”: alegi ce se șterge; numele, laturile și setările rămân */
+function ResetModal({ onClose, onBackup }: { onClose: () => void; onBackup: () => void }) {
+  const { api, notify } = useApp();
+  const [parts, setParts] = useState<ResetParts>(() => Object.fromEntries(RESET_PARTS.map((p) => [p.key, p.on])) as unknown as ResetParts);
+  const any = Object.values(parts).some(Boolean);
+  return (
+    <Modal
+      size="sm"
+      title="Pornește de la zero"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Renunță
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+            disabled={!any}
+            onClick={() => {
+              onBackup();
+              api.resetState(parts);
+              notify({ kind: 'success', title: 'Ai pornit de la zero', body: 'Copia de siguranță a fost descărcată.' });
+              onClose();
+            }}
+          >
+            Exportă copia și resetează
+          </button>
+        </>
+      }
+    >
+      <p className="text-2 small">Bifează ce vrei să ștergi. Numele, laturile cercului și setările rămân.</p>
+      <div className="col mt-12" style={{ gap: 8 }}>
+        {RESET_PARTS.map((p) => (
+          <label key={p.key} className="reset-part">
+            <input type="checkbox" checked={parts[p.key]} onChange={(e) => setParts({ ...parts, [p.key]: e.target.checked })} />
+            <span>
+              <b>{p.label}</b>
+              <small>{p.desc}</small>
+            </span>
+          </label>
+        ))}
+      </div>
     </Modal>
   );
 }

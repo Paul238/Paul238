@@ -21,18 +21,3 @@ export function levelFromXp(xp: number, toNext: (l: number) => number): LevelInf
   const needed = toNext(level);
   return { level, into: rem, needed, progress: rem / needed, total: Math.floor(xp) };
 }
-
-const TITLES: [number, string][] = [
-  [40, 'Legendă'],
-  [30, 'Mentor'],
-  [22, 'Maestru'],
-  [15, 'Expert'],
-  [10, 'Practician'],
-  [6, 'Ucenic'],
-  [3, 'Explorator'],
-  [1, 'Începător'],
-];
-
-export function characterTitle(level: number): string {
-  return TITLES.find(([min]) => level >= min)![1];
-}

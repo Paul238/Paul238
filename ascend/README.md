@@ -78,9 +78,12 @@ Ca nimeni altcineva din rețea să nu-și poată face cont, pune în `.env` lini
 
 ## Ce găsești în aplicație
 
-- **Drumul zilei**: un drumeț merge de acasă la tabăra de seară; fiecare etapă bifată ajunge în rucsac. Sus, desfășurătorul zilei în ordinea orelor.
-- **Repere cu oră** (trezire, ajuns la program, culcare) și **mese** cu calorii și macronutrienți; scor de nutriție seara.
-- **Personaj** cu 8 atribute, **vârfuri** (obiective în lei, cu timp de gândire), **provocări surpriză**, **serie cu scuturi**.
+- **Personaj și cercul laturilor**: Sănătate, Intelect, Finanțe etc. Poți scoate laturile care nu te interesează și poți adăuga altele. Atingi o latură ca să-i gestionezi sarcinile, propunerile și măsurătorile.
+- **Azi și Plan**: lista zilei pe momente ale zilei, adăugare rapidă dintr-un rând („Sală luni miercuri vineri 25p”), calendar.
+- **Repere cu oră** (trezire, ajuns la program) și **mese** cu ținta proprie de kcal și macro: dacă o depășești, primești mai puține credite.
+- **Bani**: luna (venituri − cheltuieli), plăți recurente și rate, lista de cumpărături, obiective în lei. „Evidența banilor” se bifează singură când notezi ceva.
+- **Propuneri** pentru sarcini, măsurători, plăți și cumpărături: „+” adaugă, „×” ascunde. Se pot readuce din Setări.
+- **Pornește de la zero** (Setări → Cont și date): alegi ce se șterge, după ce se descarcă o copie de siguranță.
 - Cercetarea UX din spatele designului: [docs/ux-research.md](docs/ux-research.md).
 
 ## Cum funcționează în spate

@@ -1,26 +1,26 @@
-import { BarChart3, ChevronRight, Coins, Settings, Sparkles } from 'lucide-react';
+import { BarChart3, ChevronRight, Coins, Settings, SlidersHorizontal } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ATTRIBUTES, ATTRIBUTE_MAP } from '../domain/attributes';
-import { creditsOn, isCompletedOn, scheduleLabel, tasksForDay } from '../domain/engine';
-import { latestMetric, metricsFor, metricStatus } from '../domain/metrics';
+import { ATTRIBUTES } from '../domain/attributes';
+import { creditsOn, tasksForDay } from '../domain/engine';
+import { activeMetrics, latestMetric, metricStatus } from '../domain/metrics';
 import type { AttributeKey, Task } from '../domain/types';
 import { useApp } from '../state/store';
 import { ProfileAvatar } from '../ui/components';
 import { fmt, greeting, lei, longToday } from '../ui/format';
 import { AttrIcon } from '../ui/icons';
-import { StageGlyph } from '../ui/stage';
-import { ItemSheet, Sheet } from '../world/Sheets';
+import { ItemSheet } from '../world/Sheets';
 import { ActivitySearch } from './ActivitySearch';
-import { MetricCard } from './MetricsPanel';
+import { AreaSheet, AreasEditor } from './AreaSheet';
 import { TaskEditor } from './TaskEditor';
 import type { AppView } from './AppLayout';
 
-/** ecranul principal: personajul, cu cele 8 laturi de dezvoltare în jurul lui */
+/** ecranul principal: personajul, cu laturile de dezvoltare în jurul lui */
 export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => void; openSettings: () => void; openStats: () => void }) {
   const { state, derived, today, now } = useApp();
   const c = state.character!;
   const [attr, setAttr] = useState<AttributeKey | null>(null);
   const [item, setItem] = useState<string | null>(null);
+  const [editAreas, setEditAreas] = useState(false);
   const [edit, setEdit] = useState<{ task?: Task; attrs?: AttributeKey[] } | null>(null);
   const items = useMemo(() => tasksForDay(state, today, { today }), [state, today]);
   const doneN = items.filter((i) => i.completion).length;
@@ -57,13 +57,13 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
           <ProfileAvatar name={c.name} color={c.color} size={128} />
           <b className="orbit-name">{c.name.split(' ')[0]}</b>
           <span className="orbit-title">
-            {fmt(derived.level.total)} XP pe cele 8 laturi
+            {fmt(derived.level.total)} XP pe {ATTRIBUTES.length} laturi
           </span>
         </div>
         {ATTRIBUTES.map((a, i) => {
           const l = derived.attributes[a.key];
           const angle = (i / ATTRIBUTES.length) * Math.PI * 2 - Math.PI / 2;
-          const watch = metricsFor(a.key).some((m) => metricStatus(m, latestMetric(state, m.key)) === 'watch');
+          const watch = activeMetrics(state, a.key).some((m) => metricStatus(m, latestMetric(state, m.key)) === 'watch');
           return (
             <button
               key={a.key}
@@ -84,6 +84,12 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
           );
         })}
       </section>
+      <div className="orbit-actions">
+        <button className="btn btn-sm btn-ghost" onClick={() => setEditAreas(true)}>
+          <SlidersHorizontal size={14} /> Editează laturile
+        </button>
+        <span className="muted tiny">Atinge o latură ca să-i vezi și să-i gestionezi sarcinile.</span>
+      </div>
 
       <div className="home-cards">
         <button className="home-card" onClick={() => go('today')}>
@@ -111,89 +117,16 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
       </div>
 
       {attr && (
-        <AttributeSheet
+        <AreaSheet
           attr={attr}
           onClose={() => setAttr(null)}
           onOpenTask={(id) => (setAttr(null), setItem(id))}
-          onAdd={() => (setAttr(null), setEdit({ attrs: [attr] }))}
+          onEditTask={(t) => (setAttr(null), setEdit(t ? { task: t } : { attrs: [attr] }))}
         />
       )}
+      {editAreas && <AreasEditor onClose={() => setEditAreas(false)} />}
       {item && <ItemSheet id={item} onClose={() => setItem(null)} onEdit={(t) => setEdit({ task: t })} />}
       {edit && <TaskEditor task={edit.task} defaultAttributes={edit.attrs} onClose={() => setEdit(null)} />}
     </div>
-  );
-}
-
-function AttributeSheet({ attr, onClose, onOpenTask, onAdd }: { attr: AttributeKey; onClose: () => void; onOpenTask: (id: string) => void; onAdd: () => void }) {
-  const { state, derived, today } = useApp();
-  const a = ATTRIBUTE_MAP[attr];
-  const l = derived.attributes[attr];
-  const metrics = metricsFor(attr);
-  const tasks = state.tasks.filter((t) => !t.archived && t.attributes.includes(attr));
-  const count = (id: string) => state.completions.filter((c) => c.taskId === id).length;
-
-  return (
-    <Sheet onClose={onClose} accent={a.color}>
-      <div className="row" style={{ gap: 14 }}>
-        <span className="attr-hero-icon" style={{ ['--c' as string]: a.color }}>
-          <AttrIcon attr={attr} size={26} />
-        </span>
-        <div className="grow">
-          <h2 className="sheet-title" style={{ margin: 0 }}>
-            {a.label}
-          </h2>
-          <p className="muted small">{a.description}</p>
-        </div>
-        <div className="sheet-level num">{l.level}</div>
-      </div>
-      <div className="mt-12">
-        <div className="row-between small">
-          <span className="muted">Spre nivelul {l.level + 1}</span>
-          <span className="num strong">
-            {fmt(l.into)} / {fmt(l.needed)} XP
-          </span>
-        </div>
-        <div className="attr-bar">
-          <span style={{ width: `${l.progress * 100}%`, background: a.color }} />
-        </div>
-      </div>
-
-      {metrics.length > 0 && (
-        <>
-          <div className="eyebrow-label mt-24">Datele tale</div>
-          <div className="metrics-grid">
-            {metrics.map((m) => (
-              <MetricCard key={m.key} def={m} color={a.color} />
-            ))}
-          </div>
-          {attr === 'health' && <p className="hint mt-8">Intervalele sunt orientative, nu sfat medical. Pentru valori „de urmărit” repetate, discută cu un medic.</p>}
-        </>
-      )}
-
-      <div className="eyebrow-label mt-24">Activități care o cresc</div>
-      <div className="sheet-list">
-        {tasks.length === 0 && <p className="muted small">Încă nu ai activități pentru {a.label.toLowerCase()}.</p>}
-        {tasks.map((t) => (
-          <button key={t.id} className="sheet-list-item" onClick={() => onOpenTask(t.id)}>
-            <span className={`dot-state ${isCompletedOn(state, t.id, today) ? 'on' : ''}`} style={{ ['--c' as string]: a.color }} />
-            <span className="asearch-icon" style={{ ['--c' as string]: a.color }}>
-              <StageGlyph task={t} size={15} />
-            </span>
-            <span className="grow" style={{ textAlign: 'left' }}>
-              <span className="strong">{t.title}</span>
-              <span className="muted tiny" style={{ display: 'block' }}>
-                {scheduleLabel(t)} · {count(t.id)} realizări{t.attributes[0] === attr ? '' : ' · 50% XP'}
-              </span>
-            </span>
-            <span className="num" style={{ color: 'var(--gold)', fontFamily: 'var(--font-display)', fontSize: 17 }}>
-              +{t.points}
-            </span>
-          </button>
-        ))}
-      </div>
-      <button className="btn btn-block mt-12" style={{ height: 44 }} onClick={onAdd}>
-        <Sparkles size={15} /> Activitate nouă pentru {a.label}
-      </button>
-    </Sheet>
   );
 }

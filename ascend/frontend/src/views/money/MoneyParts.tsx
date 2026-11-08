@@ -1,6 +1,7 @@
-import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, CircleAlert, FastForward, Pencil, Plus, Repeat, Trash2, Undo2 } from 'lucide-react';
+import { recurringSuggestions, type RecurringSuggestion } from '../../domain/suggestions';
+import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, CircleAlert, FastForward, Pencil, Plus, Repeat, Trash2, Undo2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { dateKey, parseKey } from '../../domain/dates';
+import { parseKey } from '../../domain/dates';
 import {
   CATEGORY_MAP,
   EXPENSE_CATEGORIES,
@@ -215,7 +216,9 @@ export function MonthOverview({ month, setMonth }: { month: string; setMonth: (m
 export function RecurringView() {
   const { state, api, today } = useApp();
   const [edit, setEdit] = useState<Recurring | 'income' | 'expense' | null>(null);
+  const [preset, setPreset] = useState<RecurringSuggestion | undefined>();
   const [extra, setExtra] = useState<Recurring | null>(null);
+  const sugg = recurringSuggestions(state);
   const list = state.recurring.filter((r) => !r.archived);
   const incomes = list.filter((r) => r.type === 'income');
   const expenses = list.filter((r) => r.type === 'expense');
@@ -310,7 +313,26 @@ export function RecurringView() {
         {expenses.length ? expenses.map(row) : <p className="muted small mrow">Chirie, utilități, abonamente, rate…</p>}
       </div>
 
-      {edit && <RecurringEditor value={typeof edit === 'string' ? undefined : edit} type={typeof edit === 'string' ? edit : edit.type} onClose={() => setEdit(null)} onDelete={(id) => (api.deleteRecurring(id), setEdit(null))} />}
+      {sugg.length > 0 && (
+        <div>
+          <div className="eyebrow-label">Propuneri</div>
+          <p className="hint">Cele mai frecvente plăți lunare ale unei gospodării. „+” o adaugă (completezi suma), „×” o ascunde.</p>
+          <div className="row wrap mt-8" style={{ gap: 6 }}>
+            {sugg.map((r) => (
+              <span key={r.id} className="chip sugg-chip">
+                <button onClick={() => (setPreset(r), setEdit(r.type))}>
+                  <Plus size={12} /> {r.title}
+                </button>
+                <button onClick={() => api.dismissSuggestion(r.id)} aria-label={`Ascunde ${r.title}`} title="Nu mă interesează">
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {edit && <RecurringEditor value={typeof edit === 'string' ? undefined : edit} preset={typeof edit === 'string' ? preset : undefined} type={typeof edit === 'string' ? edit : edit.type} onClose={() => (setEdit(null), setPreset(undefined))} onDelete={(id) => (api.deleteRecurring(id), setEdit(null))} />}
       {extra && <ExtraPaymentModal r={extra} onClose={() => setExtra(null)} />}
     </div>
   );
@@ -370,12 +392,12 @@ function ExtraPaymentModal({ r, onClose }: { r: Recurring; onClose: () => void }
   );
 }
 
-function RecurringEditor({ value, type, onClose, onDelete }: { value?: Recurring; type: 'income' | 'expense'; onClose: () => void; onDelete: (id: string) => void }) {
+function RecurringEditor({ value, type, preset, onClose, onDelete }: { value?: Recurring; type: 'income' | 'expense'; preset?: RecurringSuggestion; onClose: () => void; onDelete: (id: string) => void }) {
   const { api, today } = useApp();
-  const [title, setTitle] = useState(value?.title ?? '');
+  const [title, setTitle] = useState(value?.title ?? preset?.title ?? '');
   const [amount, setAmount] = useState(value ? String(value.amount) : '');
-  const [day, setDay] = useState(value?.day ?? Number(today.slice(8)));
-  const [cat, setCat] = useState<CategoryKey | null>(value?.category ?? null);
+  const [day, setDay] = useState(value?.day ?? preset?.day ?? Number(today.slice(8)));
+  const [cat, setCat] = useState<CategoryKey | null>(value?.category ?? preset?.category ?? null);
   const [auto, setAuto] = useState(value?.auto ?? type === 'income');
   const [principal, setPrincipal] = useState(value?.principal ? String(value.principal) : '');
   const [end, setEnd] = useState(value?.end ?? '');
@@ -528,4 +550,3 @@ export function TransactionsView({ month, setMonth }: { month: string; setMonth:
   );
 }
 
-export const currentMonth = () => monthOf(dateKey(new Date()));

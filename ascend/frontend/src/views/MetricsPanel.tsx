@@ -1,4 +1,4 @@
-import { Plus, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, TrendingDown, TrendingUp, X } from 'lucide-react';
 import { useState } from 'react';
 import { METRIC_XP, metricHistory, metricStatus, plausibleMetric, type MetricDef } from '../domain/metrics';
 import { useApp } from '../state/store';
@@ -29,7 +29,7 @@ function show(def: MetricDef, v: number, v2?: number) {
   return def.pair ? `${f(v)}/${f(v2 ?? 0)}` : f(v);
 }
 
-export function MetricCard({ def, color }: { def: MetricDef; color: string }) {
+export function MetricCard({ def, color, onRemove }: { def: MetricDef; color: string; onRemove?: () => void }) {
   const { state, api, today, notify } = useApp();
   const hist = metricHistory(state, def.key);
   const last = hist[hist.length - 1];
@@ -71,6 +71,11 @@ export function MetricCard({ def, color }: { def: MetricDef; color: string }) {
           </div>
         ) : (
           <span className="muted small">—</span>
+        )}
+        {onRemove && (
+          <button className="btn btn-ghost btn-icon metric-remove" onClick={onRemove} aria-label={`Nu mai urmăresc ${def.label}`} title="Nu mai urmăresc">
+            <X size={14} />
+          </button>
         )}
       </div>
       {last && (

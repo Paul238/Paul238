@@ -42,10 +42,6 @@ export function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
 }
 
-export function plural(n: number, one: string, many: string) {
-  return n === 1 ? one : many;
-}
-
 const nf2 = new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 /** sumă de bani cu zecimale (ex. 13,5 lei) */
 export const ron = (n: number) => `${nf2.format(Math.round(n * 100) / 100)} lei`;

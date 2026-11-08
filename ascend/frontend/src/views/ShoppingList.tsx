@@ -1,4 +1,5 @@
-import { Check, Plus, RotateCcw, ShoppingCart, Trash2 } from 'lucide-react';
+import { Check, Plus, RotateCcw, ShoppingCart, Trash2, X } from 'lucide-react';
+import { shoppingSuggestions } from '../domain/suggestions';
 import { useState } from 'react';
 import { addDays, weekStart } from '../domain/dates';
 import { CATEGORY_MAP, SHOPPING_CATEGORIES, guessCategory, type CategoryKey } from '../domain/money';
@@ -15,6 +16,7 @@ export function ShoppingList() {
   const [cat, setCat] = useState<CategoryKey | null>(null);
   const category = cat ?? (title.trim() ? guessCategory(title, 'shopping') : 'food');
   const [buying, setBuying] = useState<ShoppingItem | null>(null);
+  const sugg = shoppingSuggestions(state, category).slice(0, 10);
   const todo = state.shopping.filter((i) => !i.boughtAt).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
   const bought = state.shopping.filter((i) => i.boughtAt).sort((a, b) => (a.boughtAt! < b.boughtAt! ? 1 : -1));
   const monthFrom = today.slice(0, 8) + '01';
@@ -47,6 +49,21 @@ export function ShoppingList() {
             <Plus size={14} /> Adaugă
           </button>
         </div>
+        {sugg.length > 0 && (
+          <div className="shop-sugg">
+            <span className="tiny muted">Propuneri · {CATEGORY_MAP[category].label}:</span>
+            {sugg.map((x) => (
+              <span key={x.id} className="chip sugg-chip">
+                <button onClick={() => api.addShopping(x.title, undefined, category)}>
+                  <Plus size={12} /> {x.title}
+                </button>
+                <button onClick={() => api.dismissSuggestion(x.id)} aria-label={`Ascunde ${x.title}`} title="Nu mă interesează">
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="shop-stats">

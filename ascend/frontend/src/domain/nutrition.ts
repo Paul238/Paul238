@@ -93,6 +93,31 @@ export function nutritionScore(totals: MacroTargets, targets: MacroTargets) {
   return { score, parts };
 }
 
+/** ținta unei mese: doar câmpurile completate contează */
+export type MealTarget = Partial<MacroTargets>;
+
+const MEAL_WEIGHTS: Record<keyof MacroTargets, number> = { kcal: 2, protein: 1, carbs: 1, fat: 1 };
+
+/**
+ * Încadrarea unei mese în ținta ei: 1 până la +10% peste țintă, apoi scade liniar până la 0 la +50%.
+ * Sub țintă nu se penalizează. Fără țintă → null.
+ */
+export function mealScore(totals: MacroTargets, target?: MealTarget): { score: number; over: (keyof MacroTargets)[] } | null {
+  const keys = (Object.keys(MEAL_WEIGHTS) as (keyof MacroTargets)[]).filter((k) => (target?.[k] ?? 0) > 0);
+  if (!keys.length) return null;
+  let sum = 0;
+  let w = 0;
+  const over: (keyof MacroTargets)[] = [];
+  for (const k of keys) {
+    const ratio = totals[k] / target![k]!;
+    const part = ratio <= 1.1 ? 1 : Math.max(0, 1 - (ratio - 1.1) / 0.4);
+    if (ratio > 1.1) over.push(k);
+    sum += part * MEAL_WEIGHTS[k];
+    w += MEAL_WEIGHTS[k];
+  }
+  return { score: Math.round((sum / w) * 100) / 100, over };
+}
+
 /* ------------------------------------------------------------------ */
 /* Alimente uzuale (valori la 100 g, aproximative)                     */
 /* ------------------------------------------------------------------ */

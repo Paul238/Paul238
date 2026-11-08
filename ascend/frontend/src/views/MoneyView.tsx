@@ -1,4 +1,6 @@
+import { CircleCheck } from 'lucide-react';
 import { useState } from 'react';
+import { MONEY_TASK_ID, isCompletedOn } from '../domain/engine';
 import { monthOf } from '../domain/money';
 import { useApp } from '../state/store';
 import { GoalsView } from './GoalsView';
@@ -16,7 +18,9 @@ const TABS: [Tab, string][] = [
 
 /** „Bani”: luna (venituri − cheltuieli), plăți recurente, lista de cumpărături, cheltuieli, obiective */
 export function MoneyView() {
-  const { today } = useApp();
+  const { state, api, today, notify } = useApp();
+  const money = state.tasks.find((t) => t.id === MONEY_TASK_ID);
+  const checked = isCompletedOn(state, MONEY_TASK_ID, today);
   const [tab, setTab] = useState<Tab>('month');
   const [month, setMonth] = useState(monthOf(today));
   return (
@@ -27,6 +31,16 @@ export function MoneyView() {
             <h1>Bani</h1>
             <p>Salariul, plățile fixe și cumpărăturile — vezi mereu cât îți rămâne.</p>
           </div>
+          {money && !money.archived && (
+            <button
+              className={`btn ${checked ? '' : 'btn-primary'}`}
+              disabled={checked}
+              onClick={() => (api.moneyCheckIn(), notify({ kind: 'success', title: `+${money.points} credite`, body: 'Ai ținut evidența banilor azi.' }))}
+              title="Se bifează și singur când notezi o cheltuială, o plată sau un produs cumpărat"
+            >
+              <CircleCheck size={16} /> {checked ? 'Evidența de azi e bifată' : `Am ținut evidența azi · +${money.points}`}
+            </button>
+          )}
         </div>
       )}
       <div className="tabs money-tabs2" role="tablist">

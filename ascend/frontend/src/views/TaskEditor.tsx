@@ -1,11 +1,11 @@
 import { ChevronDown, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { ATTRIBUTE_MAP } from '../domain/attributes';
+import { attributeDef } from '../domain/attributes';
 import { xpForTask } from '../domain/engine';
 import { uid } from '../domain/id';
 import type { AttributeKey, Schedule, Task, TaskKind, TimeMode } from '../domain/types';
 import { useApp } from '../state/store';
-import { AttributeChips, Modal, Switch } from '../ui/components';
+import { AttributeChips, Modal } from '../ui/components';
 import { SchedulePicker } from './SchedulePicker';
 
 const PRESETS = [
@@ -18,14 +18,12 @@ const PRESETS = [
 export function TaskEditor({
   task,
   onClose,
-  defaultSpecial = false,
   defaultAttributes = [],
   defaultSchedule,
   initial,
 }: {
   task?: Task;
   onClose: () => void;
-  defaultSpecial?: boolean;
   defaultAttributes?: AttributeKey[];
   defaultSchedule?: Schedule;
   /** valori precompletate pentru o sarcină nouă (ex. din adăugarea rapidă) */
@@ -38,20 +36,32 @@ export function TaskEditor({
   const [attributes, setAttributesRaw] = useState<AttributeKey[]>(task?.attributes ?? defaultAttributes);
   const [attrTouched, setAttrTouched] = useState(!!task || defaultAttributes.length > 0);
   const [suggested, setSuggested] = useState(false);
-  const [more, setMore] = useState(!!task?.notes || !!task?.special);
+  const [more, setMore] = useState(!!task?.notes);
   const setAttributes = (v: AttributeKey[]) => {
     setAttrTouched(true);
     setSuggested(false);
     setAttributesRaw(v);
   };
   const [schedule, setSchedule] = useState<Schedule>(task?.schedule ?? defaultSchedule ?? { kind: 'daily', days: [] });
-  const special = task?.special ?? defaultSpecial;
   const [kind, setKind] = useState<TaskKind>(task?.kind ?? initial?.kind ?? 'task');
-  const [onRoad, setOnRoad] = useState<boolean | undefined>(task?.onRoad);
   const [time, setTime] = useState(task?.time ?? initial?.time ?? '');
   const [timeMode, setTimeMode] = useState<TimeMode>(task?.timeMode ?? 'by');
   const [tolerance, setTolerance] = useState(task?.tolerance ?? 10);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [target, setTarget] = useState({
+    kcal: task?.target?.kcal ? String(task.target.kcal) : '',
+    protein: task?.target?.protein ? String(task.target.protein) : '',
+    carbs: task?.target?.carbs ? String(task.target.carbs) : '',
+    fat: task?.target?.fat ? String(task.target.fat) : '',
+  });
+  const mealTarget = (() => {
+    const t: Partial<Record<keyof typeof target, number>> = {};
+    for (const k of Object.keys(target) as (keyof typeof target)[]) {
+      const v = Number(target[k].replace(',', '.'));
+      if (v > 0 && v < 10000) t[k] = Math.round(v);
+    }
+    return Object.keys(t).length ? t : undefined;
+  })();
 
   const valid = title.trim().length > 0 && points > 0 && (kind === 'task' || /^\d{2}:\d{2}$/.test(time));
   const preview = xpForTask({ points, attributes } as Task, 1);
@@ -61,7 +71,6 @@ export function TaskEditor({
     api.saveTask({
       id: task?.id ?? uid('t'),
       kind,
-      onRoad,
       time: time || undefined,
       timeMode: kind === 'time' ? timeMode : undefined,
       tolerance: kind === 'time' ? tolerance : undefined,
@@ -70,7 +79,7 @@ export function TaskEditor({
       points,
       attributes: attributes.length ? attributes : ['discipline'],
       schedule,
-      special: kind === 'task' && special,
+      target: kind === 'meal' ? mealTarget : undefined,
       archived: task?.archived ?? false,
       createdAt: task?.createdAt ?? new Date().toISOString(),
     });
@@ -111,7 +120,7 @@ export function TaskEditor({
       </div>
 
       <div className="field">
-        <label>Tip de etapă</label>
+        <label>Tip</label>
         <div className="segmented full">
           <button type="button" className={kind === 'task' ? 'active' : ''} onClick={() => setKind('task')}>
             Sarcină
@@ -128,7 +137,7 @@ export function TaskEditor({
             ? 'O activitate pe care o bifezi când o faci.'
             : kind === 'time'
               ? 'Notezi ora reală (ex. trezirea); primești punctele doar dacă te încadrezi.'
-              : 'Notezi ce ai mâncat (calorii și macronutrienți); contează la scorul de nutriție.'}
+              : 'Notezi ce ai mâncat (denumire, calorii, macro). Dacă depășești ținta mesei, primești mai puține credite.'}
         </span>
       </div>
 
@@ -160,12 +169,34 @@ export function TaskEditor({
         )}
       </div>
 
+      {kind === 'meal' && (
+        <div className="field">
+          <label>Ținta mesei (opțional)</label>
+          <div className="grid grid-4" style={{ gap: 8 }}>
+            {(
+              [
+                ['kcal', 'kcal'],
+                ['protein', 'Proteine (g)'],
+                ['carbs', 'Carbohidrați (g)'],
+                ['fat', 'Grăsimi (g)'],
+              ] as const
+            ).map(([k, l]) => (
+              <div key={k} className="col" style={{ gap: 4 }}>
+                <span className="tiny muted">{l}</span>
+                <input className="input num" type="number" inputMode="decimal" min={0} placeholder="—" value={target[k]} onChange={(e) => setTarget({ ...target, [k]: e.target.value })} />
+              </div>
+            ))}
+          </div>
+          <span className="hint">Completează doar ce urmărești. Până la +10% peste țintă primești toate creditele; peste, tot mai puține (0 la +50%). Sub țintă nu pierzi nimic.</span>
+        </div>
+      )}
+
       <div className="field">
-        <label>Atribute dezvoltate</label>
+        <label>Laturi dezvoltate</label>
         <AttributeChips value={attributes} onChange={setAttributes} />
         {suggested && <span className="hint">Sugerat după titlu — poți schimba.</span>}
         {attributes.length === 0 && <span className="hint">Opțional — dacă nu alegi, primește Disciplină.</span>}
-        <span className="hint">Primul atribut ales primește 100% XP, celelalte 50%. Maxim 3.</span>
+        <span className="hint">Prima latură aleasă primește 100% XP, celelalte 50%. Maxim 3.</span>
       </div>
 
       <div className="field">
@@ -183,14 +214,6 @@ export function TaskEditor({
             <span>pct</span>
           </div>
         </div>
-      </div>
-
-      <div className="row-between" style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-        <div className="col">
-          <span className="strong small">Activitate principală (pe drum)</span>
-          <span className="muted tiny">Apare pe drumul cu omulețul. Celelalte apar doar în lista zilei.</span>
-        </div>
-        <Switch checked={onRoad ?? (kind === 'time' || kind === 'meal')} onChange={setOnRoad} label="Activitate principală" />
       </div>
 
       <div className="field">
@@ -218,7 +241,7 @@ export function TaskEditor({
         </span>
         {attributes.map((a) => (
           <span key={a}>
-            +{preview[a]} XP {ATTRIBUTE_MAP[a].label}
+            +{preview[a]} XP {attributeDef(a).label}
           </span>
         ))}
       </div>

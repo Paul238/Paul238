@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ATTRIBUTE_MAP } from '../domain/attributes';
+import { attributeDef } from '../domain/attributes';
 import { DEFAULT_SETTINGS, scheduleLabel } from '../domain/engine';
 import { uid } from '../domain/id';
 import { DEFAULT_NUTRITION, computedTargets } from '../domain/nutrition';
@@ -48,7 +48,7 @@ export function OnboardingView() {
     const now = new Date().toISOString();
     const habitTasks: Task[] = [...habits].map((i) => {
       const t = TASK_TEMPLATES[i];
-      return { id: uid('t'), title: t.title, points: t.points, attributes: t.attributes, schedule: t.schedule, special: !!t.special, archived: false, createdAt: now };
+      return { id: uid('t'), title: t.title, points: t.points, attributes: t.attributes, schedule: t.schedule, archived: false, createdAt: now };
     });
     const price = Number(goalPrice);
     const goals: Goal[] =
@@ -87,12 +87,12 @@ export function OnboardingView() {
         {step === 0 && (
           <section className="onb-section">
             <h1>Profilul tău</h1>
-            <p className="onb-lead">Fiecare activitate îți crește una dintre cele 8 laturi și îți aduce credite pentru obiectivele tale.</p>
+            <p className="onb-lead">Fiecare activitate îți crește una dintre laturile tale și îți aduce credite pentru obiectivele tale.</p>
             <div className="onb-avatar-card">
               <ProfileAvatar name={name || '?'} color={color} size={96} progress={0.15} level={1} />
               <div>
                 <b className="onb-avatar-name">{name || '…'}</b>
-                <div className="muted small">Nivel 1 · Începător · 8 laturi de dezvoltare</div>
+                <div className="muted small">Nivel 1 · 8 laturi de dezvoltare (le poți schimba oricând)</div>
               </div>
             </div>
             <div className="field mt-16">
@@ -113,7 +113,7 @@ export function OnboardingView() {
         {step === 1 && (
           <section className="onb-section">
             <h1>Cum arată ziua ta?</h1>
-            <p className="onb-lead">Reperele fixe apar în fiecare zi pe drum. Le poți schimba oricând.</p>
+            <p className="onb-lead">Reperele fixe (trezire, program) apar în fiecare zi în lista Azi. Le poți schimba oricând.</p>
             <DayPlanForm value={plan} onChange={setPlan} />
           </section>
         )}
@@ -127,7 +127,7 @@ export function OnboardingView() {
             <div className="habit-grid">
               {TASK_TEMPLATES.map((t, i) => {
                 const on = habits.has(i);
-                const a = ATTRIBUTE_MAP[t.attributes[0]];
+                const a = attributeDef(t.attributes[0]);
                 return (
                   <button
                     key={t.title}
@@ -237,7 +237,7 @@ export function OnboardingView() {
               </button>
             )}
             <button className="btn btn-primary onb-next" onClick={next} disabled={(step === 0 && !name.trim()) || (step === 2 && habits.size === 0)}>
-              {step === STEPS.length - 1 ? 'Pornește la drum' : 'Continuă'} <ArrowRight size={16} />
+              {step === STEPS.length - 1 ? 'Gata, începem' : 'Continuă'} <ArrowRight size={16} />
             </button>
           </div>
         </div>

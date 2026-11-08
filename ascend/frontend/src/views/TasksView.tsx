@@ -1,6 +1,6 @@
 import { Archive, ArchiveRestore, ListChecks, Pencil } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
-import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
+import { attributeDef, visibleAttributeKeys } from '../domain/attributes';
 import { isOnceDone, scheduleLabel } from '../domain/engine';
 import type { AttributeKey, Task } from '../domain/types';
 import { useApp } from '../state/store';
@@ -47,9 +47,9 @@ export function TasksView(_: { embedded?: boolean } = {}) {
         <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>
           Toate laturile
         </button>
-        {ATTRIBUTE_KEYS.map((k) => (
-          <button key={k} className={`chip ${filter === k ? 'on' : ''}`} style={{ ['--chip-color' as string]: ATTRIBUTE_MAP[k].color }} onClick={() => setFilter(k)}>
-            <span className="dot" /> {ATTRIBUTE_MAP[k].label}
+        {visibleAttributeKeys().map((k) => (
+          <button key={k} className={`chip ${filter === k ? 'on' : ''}`} style={{ ['--chip-color' as string]: attributeDef(k).color }} onClick={() => setFilter(k)}>
+            <span className="dot" /> {attributeDef(k).label}
           </button>
         ))}
       </div>
@@ -66,7 +66,7 @@ export function TasksView(_: { embedded?: boolean } = {}) {
             <Fragment key={t.id}>
               {header && <div className="section-label">{header}</div>}
               <div className="task-row">
-                <span className="asearch-icon" style={{ ['--c' as string]: ATTRIBUTE_MAP[t.attributes[0] ?? 'discipline'].color }}>
+                <span className="asearch-icon" style={{ ['--c' as string]: attributeDef(t.attributes[0] ?? 'discipline').color }}>
                   <StageGlyph task={t} size={15} />
                 </span>
                 <button className="grow lib-main" onClick={() => setEditing(t)}>

@@ -9,7 +9,15 @@ export type AttributeKey =
   | 'finance'
   | 'social'
   | 'order'
-  | 'career';
+  | 'career'
+  /** latură adăugată de utilizator */
+  | `x-${string}`;
+
+/** laturile cercului: cele ascunse și cele adăugate de utilizator */
+export interface AreasConfig {
+  hidden: AttributeKey[];
+  custom: { key: AttributeKey; label: string; description: string; color: string; icon?: string }[];
+}
 
 export type Schedule =
   /** days: 0 = duminică ... 6 = sâmbătă; listă goală = în fiecare zi */
@@ -40,16 +48,14 @@ export interface Task {
   /** primul atribut este cel principal (100% XP), restul primesc 50% */
   attributes: AttributeKey[];
   schedule: Schedule;
-  /** inclusă în lista specială: poate fi aleasă aleatoriu ca provocare bonus */
-  special: boolean;
   archived: boolean;
   createdAt: ISODate;
+  /** pentru mese: ținta de calorii și macro a mesei (dacă o depășești, primești mai puține credite) */
+  target?: Partial<MacroTargets>;
   /** zile în care o sarcină recurentă e sărită (excepții din calendar) */
   skip?: DateKey[];
   /** zile în plus în care apare (planificate manual, ex. „mâine merg și la sală”) */
   extra?: DateKey[];
-  /** apare pe drum (activitate principală); implicit: reperele cu oră și mesele */
-  onRoad?: boolean;
 }
 
 export interface Completion {
@@ -59,15 +65,14 @@ export interface Completion {
   date: DateKey;
   at: ISODate;
   points: number;
-  bonusMultiplier: number;
-  streakMultiplier: number;
   credits: number;
   xp: Partial<Record<AttributeKey, number>>;
-  bonusId?: string;
   /** ora reală notată (HH:MM), pentru repere */
   value?: string;
   /** reperul a fost respectat */
   success?: boolean;
+  /** pentru mese cu țintă: încadrarea (0–1) */
+  score?: number;
 }
 
 /* ---------- nutriție ---------- */
@@ -169,20 +174,6 @@ export interface Goal {
   rating?: number;
 }
 
-export type BonusStatus = 'active' | 'completed' | 'expired';
-
-export interface BonusChallenge {
-  id: string;
-  taskId: string;
-  taskTitle: string;
-  assignedAt: ISODate;
-  expiresAt: ISODate;
-  multiplier: number;
-  revealed: boolean;
-  status: BonusStatus;
-  completedAt?: ISODate;
-}
-
 export interface XpGrant {
   id: string;
   at: ISODate;
@@ -191,19 +182,11 @@ export interface XpGrant {
   label: string;
 }
 
-export type BonusFrequency = 'off' | 'low' | 'normal' | 'high' | 'daily';
-
 export interface Settings {
   /** câți lei valorează un credit */
   leiPerCredit: number;
   /** ore de reflecție înainte ca un obiectiv nou să poată primi credite */
   cooldownHours: Record<GoalMode, number>;
-  bonusFrequency: BonusFrequency;
-  bonusMultiplier: number;
-  bonusWindowHours: number;
-  streakBonus: boolean;
-  /** zile libere: nu întrerup seria (0 = duminică) */
-  restDays: number[];
   theme: 'system' | 'dark' | 'light';
   nutrition?: NutritionProfile;
 }
@@ -215,9 +198,17 @@ export interface Character {
 }
 
 export interface Meta {
-  pendingDrop?: { at: ISODate; date: DateKey };
-  lastBonusRoll?: DateKey;
-  seenAchievements: string[];
+  /** sugestii ascunse de utilizator */
+  dismissed: string[];
+}
+
+/** măsurătoare definită de utilizator (ex. „Pași”, „Apă”) */
+export interface CustomMetric {
+  key: string;
+  label: string;
+  unit: string;
+  attribute: AttributeKey;
+  step: number;
 }
 
 export interface AppState {
@@ -227,11 +218,14 @@ export interface AppState {
   completions: Completion[];
   ledger: LedgerEntry[];
   goals: Goal[];
-  bonuses: BonusChallenge[];
   xpGrants: XpGrant[];
   meals: MealLog[];
   foods: CustomFood[];
   metrics: import('./metrics').MetricEntry[];
+  /** măsurători active (chei); lipsă = cele implicite */
+  metricsOn?: string[];
+  customMetrics: CustomMetric[];
+  areas: AreasConfig;
   shopping: import('./shopping').ShoppingItem[];
   transactions: import('./money').Transaction[];
   recurring: import('./money').Recurring[];

@@ -1,6 +1,6 @@
 import { Activity, ShoppingCart, Target, TrendingUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ATTRIBUTE_MAP } from '../domain/attributes';
+import { ATTRIBUTE_MAP, attributeDef } from '../domain/attributes';
 import { addDays, keyOf, parseKey, weekStart } from '../domain/dates';
 import { METRIC_MAP } from '../domain/metrics';
 import { CATEGORY_MAP, monthSummary } from '../domain/money';
@@ -50,7 +50,7 @@ export function HistoryView() {
         title: c.taskTitle,
         sub: c.value ? (c.success === false ? `notat ${c.value} · ratat` : `notat ${c.value}`) : undefined,
         credits: c.credits,
-        color: a ? ATTRIBUTE_MAP[a].color : 'var(--muted)',
+        color: a ? attributeDef(a).color : 'var(--muted)',
         taskId: t?.id,
       });
     }
@@ -75,7 +75,7 @@ export function HistoryView() {
       const def = METRIC_MAP[m.metric];
       if (!def) continue;
       const v = def.pair ? `${fmt(m.value)}/${fmt(m.value2 ?? 0)}` : def.step < 1 ? fmt1(m.value) : fmt(m.value);
-      out.push({ key: m.id, date: m.date, at: m.at, kind: 'metric', title: def.label, sub: `${v} ${def.unit}`, color: ATTRIBUTE_MAP[def.attribute].color });
+      out.push({ key: m.id, date: m.date, at: m.at, kind: 'metric', title: def.label, sub: `${v} ${def.unit}`, color: attributeDef(def.attribute).color });
     }
     return out.sort((a, b) => (a.at < b.at ? 1 : -1));
   }, [state]);

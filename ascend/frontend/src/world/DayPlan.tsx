@@ -30,9 +30,9 @@ const PLACES = ['muncă', 'școală', 'facultate', 'birou', 'sală'];
 
 export function planToTasks(plan: DayPlan, skipTitles: Set<string> = new Set()): Task[] {
   const now = new Date().toISOString();
-  const base = { special: false, archived: false, createdAt: now };
+  const base = { archived: false, createdAt: now };
   const out: Task[] = [];
-  const add = (t: Omit<Task, 'id' | 'special' | 'archived' | 'createdAt'>) => {
+  const add = (t: Omit<Task, 'id' | 'archived' | 'createdAt'>) => {
     if (!skipTitles.has(t.title.toLowerCase())) out.push({ ...base, ...t, id: uid('t') });
   };
   const everyDay = { kind: 'daily' as const, days: [] };

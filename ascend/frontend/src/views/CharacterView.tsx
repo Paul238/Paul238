@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react';
-import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
+import { useMemo } from 'react';
+import { attributeDef, visibleAttributeKeys } from '../domain/attributes';
 import { addDays, weekStart } from '../domain/dates';
 import { attributeXp, totalEarned } from '../domain/engine';
 import type { AttributeKey } from '../domain/types';
 import { useApp } from '../state/store';
-import { Constellation } from '../ui/Art';
 import { Avatar, Bar } from '../ui/components';
 import { fmt, fmtDate } from '../ui/format';
 import { AttrBadge } from '../ui/icons';
@@ -15,8 +14,6 @@ export function CharacterView() {
   const { state, derived, today } = useApp();
   const c = state.character!;
   const xp = attributeXp(state);
-  const levels = Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, derived.attributes[k].level])) as Record<AttributeKey, number>;
-  const [selected, setSelected] = useState<AttributeKey | null>(null);
 
   const perDay = useMemo(() => {
     const m = new Map<string, number>();
@@ -68,14 +65,14 @@ export function CharacterView() {
             <Avatar name={c.name} color={c.color} />
             <div>
               <div className="strong" style={{ fontSize: 16 }}>{c.name}</div>
-              <div className="muted small">pe drum din {fmtDate(c.createdAt, { month: 'long', year: 'numeric' })}</div>
+              <div className="muted small">în aplicație din {fmtDate(c.createdAt, { month: 'long', year: 'numeric' })}</div>
             </div>
           </div>
           <div>
             <div className="eyebrow-label">Nivel</div>
             <div className="row" style={{ alignItems: 'flex-end', gap: 14 }}>
               <span className="big-level num">{derived.level.level}</span>
-              <span className="display" style={{ fontSize: 26, paddingBottom: 10, fontStyle: 'italic' }}>
+              <span className="muted" style={{ fontSize: 16, paddingBottom: 10 }}>
                 nivel general
               </span>
             </div>
@@ -92,34 +89,22 @@ export function CharacterView() {
             </div>
           </div>
           <div className="grid grid-2" style={{ gap: 10 }}>
-            <MiniStat label="Altitudine" value={`${fmt(derived.level.total)} m`} />
-            <MiniStat label="Etape urcate" value={fmt(state.completions.length)} />
+            <MiniStat label="XP total" value={fmt(derived.level.total)} />
+            <MiniStat label="Activități bifate" value={fmt(state.completions.length)} />
             <MiniStat label="Activități în program" value={fmt(state.tasks.filter((t) => !t.archived).length)} />
             <MiniStat label="Credite câștigate" value={fmt(totalEarned(state))} />
           </div>
         </div>
-        <Constellation
-          levels={levels}
-          progress={Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, derived.attributes[k].progress])) as Record<AttributeKey, number>}
-          name={c.name}
-          color={c.color}
-          level={derived.level.level}
-          selected={selected}
-          onSelect={(k) => {
-            setSelected(k);
-            document.getElementById(`attr-${k}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }}
-        />
       </section>
 
       <div className="grid grid-main mt-24">
         <div className="col" style={{ gap: 16 }}>
           <div className="grid grid-2">
-            {ATTRIBUTE_KEYS.map((k) => {
+            {visibleAttributeKeys().map((k) => {
               const l = derived.attributes[k];
-              const a = ATTRIBUTE_MAP[k];
+              const a = attributeDef(k);
               return (
-                <div key={k} id={`attr-${k}`} className="card attr-card" style={{ ['--c' as string]: a.color, outline: selected === k ? `2px solid ${a.color}` : undefined }}>
+                <div key={k} id={`attr-${k}`} className="card attr-card" style={{ ['--c' as string]: a.color}}>
                   <div className="row-between">
                     <div className="row">
                       <AttrBadge attr={k} size={32} />

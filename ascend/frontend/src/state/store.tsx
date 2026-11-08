@@ -1,25 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
+import { ATTRIBUTE_KEYS, applyAreas, attributeDef } from '../domain/attributes';
 import { keyOf } from '../domain/dates';
 import {
   goalProgress,
-  activeBonus,
   attributeLevels,
   availableCredits,
   characterLevel,
-  currentStreak,
   reducer,
+  type ResetParts,
   type Action,
 } from '../domain/engine';
 import { uid } from '../domain/id';
-import type { AppState, AttributeKey, Character, CustomFood, FoodEntry, Goal, Settings, Task } from '../domain/types';
+import type { AppState, AreasConfig, AttributeKey, Character, CustomFood, CustomMetric, FoodEntry, Goal, Settings, Task } from '../domain/types';
 import type { MetricKey } from '../domain/metrics';
 import { guessCategory, type CategoryKey, type Recurring, type Transaction } from '../domain/money';
 import type { Session } from '../services/auth';
 import type { Backend } from '../services/backend';
 import type { Loaded } from '../services/storage';
 
-export type ToastKind = 'success' | 'info' | 'level' | 'achievement' | 'bonus' | 'error';
+export type ToastKind = 'success' | 'info' | 'level' | 'achievement' | 'error';
 export interface Toast {
   id: string;
   kind: ToastKind;
@@ -27,11 +26,6 @@ export interface Toast {
   body?: string;
   /** acțiune rapidă, de ex. „Anulează” */
   action?: { label: string; run: () => void };
-}
-
-export interface Celebration {
-  level: number;
-  title: string;
 }
 
 function useNow(intervalMs: number): string {
@@ -53,7 +47,6 @@ function createApi(dispatch: (a: Action) => void) {
     saveTask: (task: Task) => dispatch({ type: 'task/save', task }),
     archiveTask: (id: string, archived: boolean) => dispatch({ type: 'task/archive', id, archived }),
     deleteTask: (id: string) => dispatch({ type: 'task/delete', id }),
-    toggleSpecial: (id: string) => dispatch({ type: 'task/toggleSpecial', id }),
     skipDate: (id: string, date: string, skip: boolean) => dispatch({ type: 'task/skipDate', id, date, skip }),
     extraDate: (id: string, date: string, add: boolean) => dispatch({ type: 'task/extraDate', id, date, add }),
     addMetric: (metric: MetricKey, value: number, value2?: number) => {
@@ -99,10 +92,17 @@ function createApi(dispatch: (a: Action) => void) {
     abandonGoal: (id: string) => dispatch({ type: 'goal/abandon', id, now: now(), entryId: uid('l') }),
     deleteGoal: (id: string) => dispatch({ type: 'goal/delete', id, now: now(), entryId: uid('l') }),
     rateGoal: (id: string, rating: number) => dispatch({ type: 'goal/rate', id, rating }),
-    revealBonus: (id: string) => dispatch({ type: 'bonus/reveal', id }),
     replaceState: (state: AppState) => dispatch({ type: 'state/replace', state }),
-    tickBonus: () =>
-      dispatch({ type: 'bonus/tick', now: now(), roll: Math.random(), dropRoll: Math.random(), pickRoll: Math.random(), id: uid('b') }),
+    resetState: (parts: ResetParts) => dispatch({ type: 'state/reset', parts }),
+    moneyCheckIn: () => dispatch({ type: 'money/checkin', now: now() }),
+    dismissSuggestion: (id: string, restore = false) => dispatch({ type: 'meta/dismiss', id, restore }),
+    restoreSuggestions: () => dispatch({ type: 'meta/restoreAll' }),
+    addArea: (area: Omit<AreasConfig['custom'][number], 'key'>) => dispatch({ type: 'area/add', area: { ...area, key: `x-${uid('a')}` } }),
+    updateArea: (key: AttributeKey, patch: Partial<Omit<AreasConfig['custom'][number], 'key'>>) => dispatch({ type: 'area/update', key, patch }),
+    hideArea: (key: AttributeKey, hidden: boolean) => dispatch({ type: 'area/hide', key, hidden }),
+    toggleMetric: (key: string, on: boolean) => dispatch({ type: 'metric/toggle', key, on }),
+    addCustomMetric: (m: Omit<CustomMetric, 'key'>) => dispatch({ type: 'metric/custom', metric: { ...m, key: `c-${uid('m')}` } }),
+    deleteCustomMetric: (key: string) => dispatch({ type: 'metric/customDelete', key }),
   };
 }
 
@@ -116,15 +116,12 @@ interface AppContextValue {
   api: Api;
   derived: {
     available: number;
-    streak: { days: number; activeToday: boolean; shields: number };
     level: ReturnType<typeof characterLevel>;
     attributes: ReturnType<typeof attributeLevels>;
   };
   toasts: Toast[];
   notify: (t: Omit<Toast, 'id'>) => void;
   dismissToast: (id: string) => void;
-  celebration: Celebration | null;
-  closeCelebration: () => void;
   logout: () => void;
   backend: Backend;
   sync: SyncStatus;
@@ -149,11 +146,12 @@ export function AppProvider({
   children: ReactNode;
 }) {
   const [state, dispatch] = useReducer(reducer, initial.state);
+  // laturile cercului (inclusiv cele proprii) trebuie cunoscute înainte de orice calcul
+  applyAreas(state.areas);
   const now = useNow(15_000);
   const today = keyOf(now);
   const api = useMemo(() => createApi(dispatch), []);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [celebration, setCelebration] = useState<Celebration | null>(null);
 
   const notify = useCallback((t: Omit<Toast, 'id'>) => {
     const id = uid('t');
@@ -171,7 +169,7 @@ export function AppProvider({
   const dirty = useRef(false);
   const inFlight = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
-  const prevEvents = useRef<{ level: number; attrs: Record<AttributeKey, number>; bonusId?: string } | null>(null);
+  const prevEvents = useRef<{ level: number; attrs: Record<AttributeKey, number> } | null>(null);
 
   /** înlocuiește starea cu versiunea de pe server, fără s-o retrimită */
   const adoptRemote = useCallback((remote: Loaded) => {
@@ -252,10 +250,9 @@ export function AppProvider({
     else root.setAttribute('data-theme', state.settings.theme);
   }, [state.settings.theme]);
 
-  // motorul provocărilor rulează periodic
+  // închide zilele trecute și înregistrează plățile automate
   useEffect(() => {
     if (state.character) {
-      api.tickBonus();
       api.autoCloseDays(today);
       api.autopostMoney(today);
     }
@@ -269,14 +266,13 @@ export function AppProvider({
   const derived = useMemo(
     () => ({
       available: availableCredits(state),
-      streak: currentStreak(state, today),
       level: characterLevel(state),
       attributes: attributeLevels(state),
     }),
-    [state, today],
+    [state],
   );
 
-  // evenimente: niveluri noi, realizări, provocări
+  // evenimente: niveluri noi ale laturilor
   const prev = prevEvents;
   // obiective care tocmai au devenit accesibile (ai destule credite și perioada de reflecție a trecut)
   const affordableRef = useRef<Set<string> | null>(null);
@@ -305,17 +301,13 @@ export function AppProvider({
   useEffect(() => {
     if (!state.character) return;
     const attrs = Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, derived.attributes[k].level])) as Record<AttributeKey, number>;
-    const bonus = activeBonus(state, new Date().toISOString());
     const p = prev.current;
     if (p) {
       for (const k of ATTRIBUTE_KEYS) {
-        if (attrs[k] > p.attrs[k]) notify({ kind: 'level', title: `${ATTRIBUTE_MAP[k].label} · nivelul ${attrs[k]}`, body: 'Atributul a crescut.' });
-      }
-      if (bonus && bonus.id !== p.bonusId && !bonus.revealed) {
-        notify({ kind: 'bonus', title: 'Provocare nouă disponibilă', body: `Ai ${state.settings.bonusWindowHours}h pentru a o finaliza.` });
+        if (attrs[k] > p.attrs[k]) notify({ kind: 'level', title: `${attributeDef(k).label} · nivelul ${attrs[k]}`, body: 'Atributul a crescut.' });
       }
     }
-    prev.current = { level: derived.level.level, attrs, bonusId: bonus?.id };
+    prev.current = { level: derived.level.level, attrs };
   }, [state, derived, notify]);
 
   const value: AppContextValue = {
@@ -328,8 +320,6 @@ export function AppProvider({
     toasts,
     notify,
     dismissToast,
-    celebration,
-    closeCelebration: () => setCelebration(null),
     logout: onLogout,
     backend,
     sync,

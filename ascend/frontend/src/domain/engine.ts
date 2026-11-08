@@ -3,16 +3,16 @@ import { addDays, addHours, dateKey, daysBetween, keyOf, weekStart, weekday } fr
 import { attrXpToNext, charXpToNext, levelFromXp, type LevelInfo } from './leveling';
 import { dueAutoPayments, guessCategory, occurrenceDate, paidTx, type Recurring, type Transaction } from './money';
 import type { ShoppingItem } from './shopping';
-import { METRIC_MAP, METRIC_XP, plausibleMetric, type MetricEntry } from './metrics';
-import { dayTotals, evaluateTime, hhmmOf, nutritionScore, plausibleFood, targetsFor } from './nutrition';
+import { DEFAULT_METRICS_ON, METRIC_XP, metricDef, plausibleMetric, type MetricEntry } from './metrics';
+import { dayTotals, evaluateTime, hhmmOf, mealScore, nutritionScore, plausibleFood, sumFoods, targetsFor } from './nutrition';
 import type {
   AppState,
+  AreasConfig,
+  CustomMetric,
   CustomFood,
   DayResult,
   FoodEntry,
   AttributeKey,
-  BonusChallenge,
-  BonusFrequency,
   Character,
   Completion,
   DateKey,
@@ -30,11 +30,6 @@ import type {
 export const DEFAULT_SETTINGS: Settings = {
   leiPerCredit: 1,
   cooldownHours: { shopping: 48, development: 0, leisure: 12 },
-  bonusFrequency: 'off',
-  bonusMultiplier: 5,
-  bonusWindowHours: 24,
-  streakBonus: false,
-  restDays: [],
   theme: 'system',
 };
 
@@ -46,7 +41,6 @@ export function createEmptyState(): AppState {
     completions: [],
     ledger: [],
     goals: [],
-    bonuses: [],
     xpGrants: [],
     meals: [],
     foods: [],
@@ -56,14 +50,16 @@ export function createEmptyState(): AppState {
     recurring: [],
     days: {},
     settings: { ...DEFAULT_SETTINGS, cooldownHours: { ...DEFAULT_SETTINGS.cooldownHours } },
-    meta: { seenAchievements: [] },
+    customMetrics: [],
+    areas: { hidden: [], custom: [] },
+    meta: { dismissed: [] },
   };
 }
 
 /** completează câmpuri lipsă din date salvate de versiuni mai vechi */
 export function normalizeState(raw: Partial<AppState>): AppState {
   const base = createEmptyState();
-  return {
+  const out: AppState = {
     ...base,
     ...raw,
     // curăță intrările imposibile (ex. 100 kg dintr-un aliment, din cauza unei tastări greșite)
@@ -78,13 +74,72 @@ export function normalizeState(raw: Partial<AppState>): AppState {
       ...base.settings,
       ...(raw.settings ?? {}),
       cooldownHours: { ...base.settings.cooldownHours, ...(raw.settings?.cooldownHours ?? {}) },
-      // fără serii și provocări: aplicația se concentrează pe program, credite și laturi
-      streakBonus: false,
-      bonusFrequency: 'off',
     },
-    meta: { ...base.meta, ...(raw.meta ?? {}) },
+    customMetrics: raw.customMetrics ?? [],
+    areas: { hidden: raw.areas?.hidden ?? [], custom: raw.areas?.custom ?? [] },
+    meta: { dismissed: raw.meta?.dismissed ?? [] },
     version: 1,
   };
+  // câmpuri din versiuni vechi, la care am renunțat (provocări bonus, serii, realizări)
+  const legacy = out as unknown as Record<string, unknown>;
+  delete legacy.bonuses;
+  const st = out.settings as unknown as Record<string, unknown>;
+  for (const k of ['bonusFrequency', 'bonusMultiplier', 'bonusWindowHours', 'streakBonus', 'restDays']) delete st[k];
+  return withSystemTasks(out);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sarcina de sistem: evidența banilor                                 */
+/* ------------------------------------------------------------------ */
+
+export const MONEY_TASK_ID = 'sys-money';
+export const MONEY_TASK_POINTS = 10;
+
+export function moneyTask(createdAt: string): Task {
+  return {
+    id: MONEY_TASK_ID,
+    title: 'Evidența banilor',
+    notes: 'Se bifează singură când notezi o cheltuială, o plată sau un produs cumpărat.',
+    points: MONEY_TASK_POINTS,
+    attributes: ['finance'],
+    schedule: { kind: 'daily', days: [] },
+    archived: false,
+    createdAt,
+  };
+}
+
+/** sarcina de sistem „Evidența banilor”: se adaugă dacă lipsește; dacă o arhivezi, nu mai revine */
+function withSystemTasks(state: AppState, createdAt?: string): AppState {
+  if (!state.character) return state;
+  // de acum înainte (altfel calendarul le-ar arăta ca ratate în zilele trecute)
+  const created = createdAt ?? new Date().toISOString();
+  let tasks = state.tasks;
+  if (!tasks.some((t) => t.id === MONEY_TASK_ID)) tasks = [...tasks, moneyTask(created)];
+  return tasks === state.tasks ? state : { ...state, tasks };
+}
+
+/** ce părți se pot reseta din „Pornește de la zero” */
+export interface ResetParts {
+  /** bifări, credite, XP, zile închise */
+  progress: boolean;
+  goals: boolean;
+  /** măsurători și mese */
+  health: boolean;
+  /** cheltuieli, venituri, plăți recurente, listă de cumpărături */
+  money: boolean;
+  /** sarcinile din program */
+  program: boolean;
+}
+
+export function resetState(state: AppState, parts: ResetParts): AppState {
+  const next: AppState = { ...state };
+  if (parts.progress) Object.assign(next, { completions: [], ledger: [], xpGrants: [], days: {} });
+  if (parts.goals) next.goals = [];
+  else if (parts.progress) next.goals = state.goals.map((g) => ({ ...g, saved: 0 }));
+  if (parts.health) Object.assign(next, { metrics: [], meals: [] });
+  if (parts.money) Object.assign(next, { transactions: [], shopping: [], recurring: [] });
+  if (parts.program) next.tasks = [];
+  return withSystemTasks(next);
 }
 
 /* ------------------------------------------------------------------ */
@@ -114,12 +169,6 @@ function monthlyDayFor(day: number, date: DateKey) {
   const [y, m] = date.split('-').map(Number);
   const last = new Date(y, m, 0).getDate();
   return Math.min(Math.max(1, day), last);
-}
-
-/** dacă sarcina e programată în ziua dată (fără a ține cont de completări) */
-/** activitate principală: apare pe drumul din ecranul principal */
-export function isMainTask(task: Task): boolean {
-  return task.onRoad ?? (task.kind === 'time' || task.kind === 'meal');
 }
 
 export function isScheduledOn(task: Task, date: DateKey): boolean {
@@ -245,113 +294,12 @@ export function goalDeadlinePlan(state: AppState, goal: Goal, today: DateKey) {
   return { daysLeft, perDay, pace, status, missing };
 }
 
-/* ---------- serii (streak) ---------- */
-
-function activeDays(state: AppState): Set<DateKey> {
-  return new Set(state.completions.map((c) => c.date));
-}
-
-/** câte zile consecutive cu activitate se termină la data `end` (zilele libere nu rup seria) */
-/** câte zile active consecutive sunt necesare pentru a câștiga un scut de serie */
-export const SHIELD_EVERY = 7;
-export const MAX_SHIELDS = 2;
-
-export interface StreakInfo {
-  days: number;
-  /** scuturi disponibile: o zi ratată consumă un scut în loc să rupă seria */
-  shields: number;
-  best: number;
-  /** zilele salvate de scuturi */
-  saved: DateKey[];
-}
-
-/**
- * Simulează seria de la crearea contului până la `end`.
- * Zilele libere nu contează; o zi ratată consumă un scut (dacă există) în loc să rupă seria.
- * Se câștigă un scut la fiecare SHIELD_EVERY zile active (maxim MAX_SHIELDS).
- */
-export function streakInfo(state: AppState, end: DateKey): StreakInfo {
-  const days = activeDays(state);
-  const first = [...days].sort()[0];
-  const created = state.character ? keyOf(state.character.createdAt) : first;
-  const start = first && created && first < created ? first : created;
-  const out: StreakInfo = { days: 0, shields: 0, best: 0, saved: [] };
-  if (!start || start > end) return out;
-  let since = 0;
-  for (let d = start, i = 0; d <= end && i < 4000; d = addDays(d, 1), i++) {
-    if (days.has(d)) {
-      out.days++;
-      since++;
-      if (since >= SHIELD_EVERY) {
-        since = 0;
-        out.shields = Math.min(MAX_SHIELDS, out.shields + 1);
-      }
-    } else if (state.settings.restDays.includes(weekday(d))) {
-      continue;
-    } else if (out.shields > 0 && out.days > 0) {
-      out.shields--;
-      out.saved.push(d);
-    } else {
-      out.days = 0;
-      since = 0;
-    }
-    out.best = Math.max(out.best, out.days);
-  }
-  return out;
-}
-
-export function streakEndingAt(state: AppState, end: DateKey): number {
-  return streakInfo(state, end).days;
-}
-
-/** seria curentă: dacă azi nu ai bifat încă nimic, seria de ieri este încă vie */
-export function currentStreak(state: AppState, today: DateKey): { days: number; activeToday: boolean; shields: number } {
-  const activeToday = state.completions.some((c) => c.date === today);
-  const info = streakInfo(state, activeToday ? today : addDays(today, -1));
-  return { days: info.days, activeToday, shields: info.shields };
-}
-
-export function longestStreak(state: AppState): number {
-  const last = [...activeDays(state)].sort().pop();
-  return last ? streakInfo(state, last).best : 0;
-}
-
-/* ---------- alimente: scurtături pentru notare ---------- */
-
-/** ultimele alimente folosite (unice după nume), cu ultima cantitate */
-export function recentFoods(state: AppState, limit = 8): FoodEntry[] {
-  const seen = new Set<string>();
-  const out: FoodEntry[] = [];
-  const logs = [...state.meals].sort((a, b) => (a.date < b.date ? 1 : -1));
-  for (const m of logs) {
-    for (const f of [...m.foods].reverse()) {
-      const k = f.name.toLowerCase();
-      if (seen.has(k) || !plausibleFood(f)) continue;
-      seen.add(k);
-      out.push(f);
-      if (out.length >= limit) return out;
-    }
-  }
-  return out;
-}
-
-/** ultima dată (înainte de `date`) când ai notat masa respectivă */
-export function previousMeal(state: AppState, taskId: string, date: DateKey) {
-  return [...state.meals]
-    .filter((m) => m.taskId === taskId && m.date < date && m.foods.length > 0)
-    .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
-}
-
-export function streakMultiplierFor(streakDays: number, enabled: boolean): number {
-  return enabled ? 1 + Math.min(streakDays, 30) / 100 : 1;
-}
-
 /* ---------- XP și niveluri ---------- */
 
 export function attributeXp(state: AppState): Record<AttributeKey, number> {
   const xp = emptyAttributeRecord();
-  for (const c of state.completions) for (const [k, v] of Object.entries(c.xp)) xp[k as AttributeKey] += v ?? 0;
-  for (const g of state.xpGrants) xp[g.attribute] += g.amount;
+  for (const c of state.completions) for (const [k, v] of Object.entries(c.xp)) xp[k as AttributeKey] = (xp[k as AttributeKey] ?? 0) + (v ?? 0);
+  for (const g of state.xpGrants) xp[g.attribute] = (xp[g.attribute] ?? 0) + g.amount;
   return xp;
 }
 
@@ -377,53 +325,33 @@ export function xpForTask(task: Task, multiplier: number): Partial<Record<Attrib
   return out;
 }
 
+/** ultimele alimente folosite (unice după nume), cu ultima cantitate */
+export function recentFoods(state: AppState, limit = 8): FoodEntry[] {
+  const seen = new Set<string>();
+  const out: FoodEntry[] = [];
+  const logs = [...state.meals].sort((a, b) => (a.date < b.date ? 1 : -1));
+  for (const m of logs) {
+    for (const f of [...m.foods].reverse()) {
+      const k = f.name.toLowerCase();
+      if (seen.has(k) || !plausibleFood(f)) continue;
+      seen.add(k);
+      out.push(f);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
+/** ultima dată (înainte de `date`) când ai notat masa respectivă */
+export function previousMeal(state: AppState, taskId: string, date: DateKey) {
+  return [...state.meals]
+    .filter((m) => m.taskId === taskId && m.date < date && m.foods.length > 0)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+}
+
 /** ce primești dacă bifezi sarcina acum (pentru previzualizare) */
-export function previewReward(state: AppState, task: Task, now: string) {
-  const today = keyOf(now);
-  const bonus = activeBonusFor(state, task.id, now);
-  const bonusMultiplier = bonus ? bonus.multiplier : 1;
-  const streak = streakEndingAt(state, addDays(today, -1));
-  const streakMultiplier = streakMultiplierFor(streak, state.settings.streakBonus);
-  return {
-    credits: Math.round(task.points * bonusMultiplier * streakMultiplier),
-    xp: xpForTask(task, bonusMultiplier),
-    bonusMultiplier,
-    streakMultiplier,
-  };
-}
-
-/* ---------- provocări bonus ---------- */
-
-export function activeBonus(state: AppState, now: string): BonusChallenge | undefined {
-  return state.bonuses.find((b) => b.status === 'active' && b.expiresAt > now);
-}
-
-export function activeBonusFor(state: AppState, taskId: string, now: string): BonusChallenge | undefined {
-  const b = activeBonus(state, now);
-  return b && b.taskId === taskId ? b : undefined;
-}
-
-export const BONUS_CHANCE: Record<BonusFrequency, number> = {
-  off: 0,
-  low: 0.3,
-  normal: 0.5,
-  high: 0.75,
-  daily: 1,
-};
-
-/** sarcinile care pot deveni provocare acum */
-export function bonusEligibleTasks(state: AppState, now: string): Task[] {
-  const today = keyOf(now);
-  const tomorrow = addDays(today, 1);
-  return state.tasks.filter(
-    (t) =>
-      (t.kind ?? 'task') === 'task' &&
-      t.special &&
-      !t.archived &&
-      !isOnceDone(state, t) &&
-      !isCompletedOn(state, t.id, today) &&
-      (isScheduledOn(t, today) || isScheduledOn(t, tomorrow)),
-  );
+export function previewReward(_state: AppState, task: Task, _now?: string) {
+  return { credits: task.points, xp: xpForTask(task, 1) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -437,7 +365,6 @@ export type Action =
   | { type: 'task/save'; task: Task }
   | { type: 'task/archive'; id: string; archived: boolean }
   | { type: 'task/delete'; id: string }
-  | { type: 'task/toggleSpecial'; id: string }
   | { type: 'task/skipDate'; id: string; date: DateKey; skip: boolean }
   | { type: 'task/extraDate'; id: string; date: DateKey; add: boolean }
   | { type: 'metric/add'; entry: MetricEntry; grantId: string }
@@ -473,9 +400,16 @@ export type Action =
   | { type: 'goal/abandon'; id: string; now: string; entryId: string }
   | { type: 'goal/rate'; id: string; rating: number }
   | { type: 'goal/delete'; id: string; now: string; entryId: string }
-  | { type: 'bonus/tick'; now: string; roll: number; dropRoll: number; pickRoll: number; id: string }
-  | { type: 'bonus/reveal'; id: string }
-  | { type: 'meta/seeAchievements'; ids: string[] }
+  | { type: 'meta/dismiss'; id: string; restore?: boolean }
+  | { type: 'meta/restoreAll' }
+  | { type: 'metric/toggle'; key: string; on: boolean }
+  | { type: 'metric/custom'; metric: CustomMetric }
+  | { type: 'metric/customDelete'; key: string }
+  | { type: 'area/add'; area: AreasConfig['custom'][number] }
+  | { type: 'area/update'; key: AttributeKey; patch: Partial<Omit<AreasConfig['custom'][number], 'key'>> }
+  | { type: 'area/hide'; key: AttributeKey; hidden: boolean }
+  | { type: 'money/checkin'; now: string }
+  | { type: 'state/reset'; parts: ResetParts }
   | { type: 'state/replace'; state: AppState };
 
 function ledger(entry: LedgerEntry, state: AppState): LedgerEntry[] {
@@ -490,16 +424,40 @@ export function cooldownFor(settings: Settings, mode: GoalMode): number {
   return Math.max(0, settings.cooldownHours[mode] ?? 0);
 }
 
+/** momentul unei acțiuni prin care ai gestionat banii (pentru bifarea automată) */
+function moneyMoment(action: Action): string | undefined {
+  switch (action.type) {
+    case 'money/checkin':
+    case 'shop/buy':
+    case 'rec/pay':
+    case 'rec/extra':
+      return action.now;
+    case 'tx/add':
+      return action.tx.at;
+    default:
+      return undefined;
+  }
+  return undefined;
+}
+
 export function reducer(state: AppState, action: Action): AppState {
+  const next = baseReducer(state, action);
+  const at = moneyMoment(action);
+  if (!at || (next === state && action.type !== 'money/checkin')) return next;
+  // ai ținut evidența banilor azi → „Evidența banilor” se bifează singură
+  return baseReducer(next, { type: 'task/complete', taskId: MONEY_TASK_ID, now: at, id: `money-${keyOf(at)}` });
+}
+
+function baseReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'onboard':
-      return {
+      return withSystemTasks({
         ...state,
         character: action.character,
         tasks: [...state.tasks, ...action.tasks],
         goals: [...state.goals, ...action.goals],
         settings: { ...state.settings, ...action.settings },
-      };
+      }, action.character.createdAt);
 
     case 'character/update':
       return state.character ? { ...state, character: { ...state.character, ...action.patch } } : state;
@@ -519,7 +477,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, tasks: state.tasks.map((t) => (t.id === action.id ? { ...t, archived: action.archived } : t)) };
 
     case 'metric/add': {
-      const def = METRIC_MAP[action.entry.metric];
+      const def = metricDef(state, action.entry.metric);
       if (!def || !plausibleMetric(def, action.entry.value, action.entry.value2)) return state;
       const firstToday = !state.metrics.some((e) => e.metric === action.entry.metric && e.date === action.entry.date);
       return {
@@ -637,17 +595,11 @@ export function reducer(state: AppState, action: Action): AppState {
         ),
       };
 
-    case 'task/toggleSpecial':
-      return { ...state, tasks: state.tasks.map((t) => (t.id === action.id ? { ...t, special: !t.special } : t)) };
-
     case 'task/delete':
       // istoricul (completările) rămâne, doar sarcina dispare
       return {
         ...state,
         tasks: state.tasks.filter((t) => t.id !== action.id),
-        bonuses: state.bonuses.map((b) =>
-          b.taskId === action.id && b.status === 'active' ? { ...b, status: 'expired' } : b,
-        ),
       };
 
     case 'task/complete': {
@@ -657,9 +609,6 @@ export function reducer(state: AppState, action: Action): AppState {
       if (isCompletedOn(state, task.id, date) || isOnceDone(state, task)) return state;
       if (task.schedule.kind === 'weekly' && weekCount(state, task.id, date) >= task.schedule.times) return state;
 
-      const bonus = activeBonusFor(state, task.id, action.now);
-      const bonusMultiplier = bonus ? bonus.multiplier : 1;
-      const streakMultiplier = streakMultiplierFor(streakEndingAt(state, addDays(date, -1)), state.settings.streakBonus);
       // reperele cu oră aduc puncte doar dacă ora a fost respectată
       let value: string | undefined;
       let success: boolean | undefined;
@@ -667,8 +616,15 @@ export function reducer(state: AppState, action: Action): AppState {
         value = action.value ?? hhmmOf(action.now);
         success = evaluateTime(task.time, task.timeMode ?? 'by', task.tolerance ?? 0, value).success;
       }
-      const earned = success === false ? 0 : 1;
-      const credits = Math.round(task.points * bonusMultiplier * streakMultiplier) * earned;
+      let earned = success === false ? 0 : 1;
+      // mesele cu țintă: mai puține credite dacă ai depășit caloriile sau macro
+      let score: number | undefined;
+      if (task.kind === 'meal') {
+        const log = state.meals.find((m) => m.date === date && m.taskId === task.id);
+        const r = mealScore(sumFoods(log?.foods ?? []), task.target);
+        if (r) earned = score = r.score;
+      }
+      const credits = Math.round(task.points * earned);
       const completion: Completion = {
         id: action.id,
         taskId: task.id,
@@ -676,13 +632,11 @@ export function reducer(state: AppState, action: Action): AppState {
         date,
         at: action.now,
         points: task.points,
-        bonusMultiplier,
-        streakMultiplier,
         credits,
-        xp: earned ? xpForTask(task, bonusMultiplier) : {},
-        bonusId: bonus?.id,
+        xp: earned ? xpForTask(task, earned) : {},
         value,
         success,
+        score,
       };
       return {
         ...state,
@@ -693,14 +647,11 @@ export function reducer(state: AppState, action: Action): AppState {
             at: action.now,
             amount: credits,
             kind: 'earn',
-            label: bonus ? `${task.title} · provocare ×${bonus.multiplier}` : value ? `${task.title} · ${value}${success ? '' : ' (ratat)'}` : task.title,
+            label: value ? `${task.title} · ${value}${success ? '' : ' (ratat)'}` : score !== undefined ? `${task.title} · încadrare ${Math.round(score * 100)}%` : task.title,
             ref: completion.id,
           },
           state,
         ),
-        bonuses: bonus
-          ? state.bonuses.map((b) => (b.id === bonus.id ? { ...b, status: 'completed', completedAt: action.now, revealed: true } : b))
-          : state.bonuses,
       };
     }
 
@@ -714,13 +665,6 @@ export function reducer(state: AppState, action: Action): AppState {
           { id: action.entryId, at: action.now, amount: -c.credits, kind: 'reversal', label: `Anulat: ${c.taskTitle}`, ref: c.id },
           state,
         ),
-        bonuses: c.bonusId
-          ? state.bonuses.map((b) =>
-              b.id === c.bonusId
-                ? { ...b, status: b.expiresAt > action.now ? 'active' : 'expired', completedAt: undefined }
-                : b,
-            )
-          : state.bonuses,
       };
     }
 
@@ -843,12 +787,6 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'goal/rate':
       return { ...state, goals: updateGoal(state, action.id, (g) => ({ ...g, rating: action.rating })) };
 
-    case 'bonus/tick':
-      return bonusTick(state, action);
-
-    case 'bonus/reveal':
-      return { ...state, bonuses: state.bonuses.map((b) => (b.id === action.id ? { ...b, revealed: true } : b)) };
-
     case 'meal/addFood': {
       if (!plausibleFood(action.food)) return state;
       const existing = state.meals.find((m) => m.date === action.date && m.taskId === action.taskId);
@@ -891,8 +829,51 @@ export function reducer(state: AppState, action: Action): AppState {
       return pending.reduce((st, d) => closeDay(st, d, action.now, `${action.seed}-${d}`), state);
     }
 
-    case 'meta/seeAchievements':
-      return { ...state, meta: { ...state.meta, seenAchievements: [...new Set([...state.meta.seenAchievements, ...action.ids])] } };
+    case 'meta/dismiss': {
+      const set = new Set(state.meta.dismissed);
+      if (action.restore) set.delete(action.id);
+      else set.add(action.id);
+      return { ...state, meta: { ...state.meta, dismissed: [...set] } };
+    }
+
+    case 'money/checkin':
+      return state;
+
+    case 'metric/toggle': {
+      const on = new Set(state.metricsOn ?? DEFAULT_METRICS_ON);
+      if (action.on) on.add(action.key);
+      else on.delete(action.key);
+      return { ...state, metricsOn: [...on] };
+    }
+
+    case 'metric/custom':
+      return action.metric.label.trim() && !state.customMetrics.some((m) => m.key === action.metric.key)
+        ? { ...state, customMetrics: [...state.customMetrics, { ...action.metric, label: action.metric.label.trim() }] }
+        : state;
+
+    case 'metric/customDelete':
+      return { ...state, customMetrics: state.customMetrics.filter((m) => m.key !== action.key) };
+
+    case 'area/add':
+      return action.area.label.trim() && !state.areas.custom.some((a) => a.key === action.area.key)
+        ? { ...state, areas: { ...state.areas, custom: [...state.areas.custom, { ...action.area, label: action.area.label.trim() }] } }
+        : state;
+
+    case 'area/update':
+      return { ...state, areas: { ...state.areas, custom: state.areas.custom.map((a) => (a.key === action.key ? { ...a, ...action.patch } : a)) } };
+
+    case 'area/hide': {
+      const hidden = new Set(state.areas.hidden);
+      if (action.hidden) hidden.add(action.key);
+      else hidden.delete(action.key);
+      return { ...state, areas: { ...state.areas, hidden: [...hidden] } };
+    }
+
+    case 'state/reset':
+      return resetState(state, action.parts);
+
+    case 'meta/restoreAll':
+      return { ...state, meta: { ...state.meta, dismissed: [] } };
 
     case 'state/replace':
       return normalizeState(action.state);
@@ -906,7 +887,9 @@ export function closeDay(state: AppState, date: DateKey, now: string, seed: stri
   const hasMeals = state.meals.some((m) => m.date === date && m.foods.length > 0);
   const result: DayResult = { closedAt: now };
   let next: AppState = state;
-  if (profile && hasMeals) {
+  // mesele cu țintă proprie se punctează la bifare; scorul zilei rămâne doar pentru cine nu le folosește
+  const perMeal = state.tasks.some((t) => t.kind === 'meal' && !t.archived && mealScore({ kcal: 0, protein: 0, carbs: 0, fat: 0 }, t.target));
+  if (profile && hasMeals && !perMeal) {
     const totals = dayTotals(state, date);
     const targets = targetsFor(profile);
     const { score } = nutritionScore(totals, targets);
@@ -926,66 +909,6 @@ export function closeDay(state: AppState, date: DateKey, now: string, seed: stri
 
 export function developmentXp(requiredCredits: number): number {
   return Math.min(500, Math.max(20, Math.round(requiredCredits * 0.1)));
-}
-
-/**
- * Motorul provocărilor bonus.
- * 1. expiră provocările trecute de termen;
- * 2. o dată pe zi decide (cu probabilitatea frecvenței) dacă apare o provocare
- *    și programează un moment aleatoriu din zi (între acum și ora 21);
- * 3. când momentul a sosit, alege aleatoriu o sarcină din lista specială.
- */
-function bonusTick(state: AppState, a: Extract<Action, { type: 'bonus/tick' }>): AppState {
-  const now = a.now;
-  const today = keyOf(now);
-  let bonuses = state.bonuses.map((b) => (b.status === 'active' && b.expiresAt <= now ? { ...b, status: 'expired' as const } : b));
-  let meta = state.meta;
-  const hasActive = bonuses.some((b) => b.status === 'active');
-  const s = state.settings;
-
-  if (s.bonusFrequency === 'off') {
-    const changed = bonuses.some((b, i) => b !== state.bonuses[i]) || meta.pendingDrop;
-    return changed ? { ...state, bonuses, meta: { ...meta, pendingDrop: undefined } } : state;
-  }
-
-  // programare zilnică
-  if (!meta.pendingDrop && !hasActive && meta.lastBonusRoll !== today) {
-    meta = { ...meta, lastBonusRoll: today };
-    if (a.roll < BONUS_CHANCE[s.bonusFrequency]) {
-      const nowDate = new Date(now);
-      const end = new Date(nowDate);
-      end.setHours(21, 0, 0, 0);
-      const span = Math.max(0, end.getTime() - nowDate.getTime());
-      meta.pendingDrop = { date: today, at: new Date(nowDate.getTime() + a.dropRoll * span).toISOString() };
-    }
-  }
-
-  // livrare
-  if (meta.pendingDrop && !hasActive && meta.pendingDrop.at <= now) {
-    const eligible = bonusEligibleTasks({ ...state, bonuses }, now);
-    const last = [...bonuses].sort((x, y) => (x.assignedAt < y.assignedAt ? 1 : -1))[0];
-    const pool = eligible.length > 1 && last ? eligible.filter((t) => t.id !== last.taskId) : eligible;
-    meta = { ...meta, pendingDrop: undefined };
-    if (pool.length > 0) {
-      const task = pool[Math.min(pool.length - 1, Math.floor(a.pickRoll * pool.length))];
-      bonuses = [
-        ...bonuses,
-        {
-          id: a.id,
-          taskId: task.id,
-          taskTitle: task.title,
-          assignedAt: now,
-          expiresAt: addHours(now, s.bonusWindowHours),
-          multiplier: s.bonusMultiplier,
-          revealed: false,
-          status: 'active',
-        },
-      ];
-    }
-  }
-
-  const changed = meta !== state.meta || bonuses.some((b, i) => b !== state.bonuses[i]) || bonuses.length !== state.bonuses.length;
-  return changed ? { ...state, bonuses, meta } : state;
 }
 
 /* ---------- utilitare pentru UI ---------- */

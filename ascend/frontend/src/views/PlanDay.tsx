@@ -1,6 +1,6 @@
 import { Check, Pencil, Plus, Repeat, RotateCcw, SkipForward, X } from 'lucide-react';
 import { useState } from 'react';
-import { ATTRIBUTE_MAP } from '../domain/attributes';
+import { attributeDef } from '../domain/attributes';
 import { parseKey } from '../domain/dates';
 import { calendarDay, scheduleLabel } from '../domain/engine';
 import type { Task } from '../domain/types';
@@ -29,7 +29,7 @@ export function PlanDay({ date, compact }: { date: string; compact?: boolean }) 
     <div className="planday">
       {!compact && <h3 className="display planday-title">{dayName(date)}</h3>}
       <p className="muted small">
-        {active.length} {active.length === 1 ? 'etapă' : 'etape'} · până la +{fmt(possible)} credite
+        {active.length} {active.length === 1 ? 'activitate' : 'activități'} · până la +{fmt(possible)} credite
       </p>
 
       <div className="planday-list">
@@ -38,7 +38,7 @@ export function PlanDay({ date, compact }: { date: string; compact?: boolean }) 
           const t = item.task;
           const recurring = t.schedule.kind !== 'once';
           return (
-            <div key={t.id} className={`planday-row ${status}`} style={{ ['--c' as string]: ATTRIBUTE_MAP[t.attributes[0] ?? 'discipline'].color }}>
+            <div key={t.id} className={`planday-row ${status}`} style={{ ['--c' as string]: attributeDef(t.attributes[0] ?? 'discipline').color }}>
               <span className="planday-time num">{t.time ?? '—'}</span>
               <span className="planday-icon">
                 {status === 'done' ? <Check size={14} strokeWidth={3} /> : status === 'missed' ? <X size={14} strokeWidth={3} /> : <StageGlyph task={t} size={15} />}

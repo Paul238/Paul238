@@ -22,7 +22,7 @@ export function scheduleSentence(s: Schedule): string {
     case 'daily':
       return s.days.length === 0 || s.days.length === 7 ? 'Apare în fiecare zi.' : `Apare ${joinRo(WEEK_ORDER.filter((d) => s.days.includes(d)).map((d) => FULL[d]))}.`;
     case 'weekly':
-      return `De ${s.times} ${s.times === 1 ? 'dată' : 'ori'} pe săptămână, în ce zile vrei. Apare pe drum până atingi numărul.`;
+      return `De ${s.times} ${s.times === 1 ? 'dată' : 'ori'} pe săptămână, în ce zile vrei. Apare în lista zilei până atingi numărul.`;
     case 'monthly':
       return `Apare în fiecare lună, pe ${s.day}${s.day > 28 ? ' (sau în ultima zi, dacă luna e mai scurtă)' : ''}.`;
     case 'once':

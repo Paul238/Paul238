@@ -1,6 +1,6 @@
 import { Check, CalendarPlus, Plus, Search, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import { ATTRIBUTE_MAP } from '../domain/attributes';
+import { attributeDef } from '../domain/attributes';
 import { isCompletedOn, isScheduledOn, scheduleLabel } from '../domain/engine';
 import { uid } from '../domain/id';
 import type { Task } from '../domain/types';
@@ -55,7 +55,7 @@ export function ActivitySearch({ mode, date, onOpen, autoFocus, suggest = true }
         return;
       }
       const cid = api.completeTask(t.id);
-      notify({ kind: 'success', title: `+${t.points} credite`, body: `${t.title} · în rucsac`, action: { label: 'Anulează', run: () => api.undoCompletion(cid) } });
+      notify({ kind: 'success', title: `+${t.points} credite`, body: t.title, action: { label: 'Anulează', run: () => api.undoCompletion(cid) } });
     } else {
       if (st === 'planned' || st === 'done') return;
       if (st === 'skipped') api.skipDate(t.id, date, false);
@@ -76,7 +76,6 @@ export function ActivitySearch({ mode, date, onOpen, autoFocus, suggest = true }
       points,
       attributes: attrs.length ? attrs : ['discipline'],
       schedule: { kind: 'once', due: date },
-      special: false,
       archived: false,
       createdAt: new Date().toISOString(),
     };
@@ -119,7 +118,7 @@ export function ActivitySearch({ mode, date, onOpen, autoFocus, suggest = true }
             const st = status(t);
             const disabled = mode === 'log' ? st === 'done' : st === 'planned' || st === 'done';
             return (
-              <button key={t.id} className={`asearch-row ${disabled ? 'off' : ''}`} onClick={() => pick(t)} disabled={disabled} style={{ ['--c' as string]: ATTRIBUTE_MAP[t.attributes[0] ?? 'discipline'].color }}>
+              <button key={t.id} className={`asearch-row ${disabled ? 'off' : ''}`} onClick={() => pick(t)} disabled={disabled} style={{ ['--c' as string]: attributeDef(t.attributes[0] ?? 'discipline').color }}>
                 <span className="asearch-icon">
                   <StageGlyph task={t} size={15} />
                 </span>

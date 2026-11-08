@@ -28,7 +28,6 @@ export function QuickAdd({ autoFocus }: { autoFocus?: boolean }) {
       points: p.points ?? (p.kind === 'meal' ? 5 : 15),
       attributes: attrs.length ? attrs : p.kind === 'meal' ? ['health'] : ['discipline'],
       schedule: p.schedule,
-      special: false,
       archived: false,
       createdAt: new Date().toISOString(),
     };

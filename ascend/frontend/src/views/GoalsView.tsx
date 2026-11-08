@@ -1,6 +1,6 @@
 import { CalendarClock, Coffee, Coins, ExternalLink, GraduationCap, History, Hourglass, Pencil, PiggyBank, Plus, Scale, ShoppingBag, Star, TrendingUp } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
+import { attributeDef, visibleAttributeKeys } from '../domain/attributes';
 import { averageDailyCredits, cooldownFor, developmentXp, goalDeadlinePlan, goalProgress, goalRequiredCredits, savedInGoals } from '../domain/engine';
 import type { AttributeKey, Goal, GoalMode } from '../domain/types';
 import { daysBetween, dateKey } from '../domain/dates';
@@ -253,7 +253,7 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
               <ShoppingBag size={15} /> Cumpără acum · −{fmt(Math.max(0, required - goal.saved))} cr
             </button>
           ) : (
-            <span className="muted small">Creditele tale contează automat. Continuă pe drum: mai ai {fmt(missing)} credite.</span>
+            <span className="muted small">Creditele tale contează automat. Mai ai {fmt(missing)} credite.</span>
           )}
           <button className="btn btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => setModal('abandon')}>
             Renunț
@@ -362,7 +362,7 @@ function PurchaseModal({ goal, onClose }: { goal: Goal; required: number; onClos
         <div className="notice notice-info">
           <GraduationCap size={16} />
           <span>
-            Investiție în dezvoltare: primești <strong>+{developmentXp(required)} XP</strong> la {ATTRIBUTE_MAP[goal.attribute].label}.
+            Investiție în dezvoltare: primești <strong>+{developmentXp(required)} XP</strong> la {attributeDef(goal.attribute).label}.
           </span>
         </div>
       )}
@@ -548,9 +548,9 @@ export function GoalEditor({ goal, defaultMode, onClose }: { goal?: Goal; defaul
           <label>Ce atribut dezvoltă?</label>
           <select className="select" value={attribute} onChange={(e) => setAttribute(e.target.value as AttributeKey)}>
             <option value="">— alege —</option>
-            {ATTRIBUTE_KEYS.map((k) => (
+            {visibleAttributeKeys().map((k) => (
               <option key={k} value={k}>
-                {ATTRIBUTE_MAP[k].label}
+                {attributeDef(k).label}
               </option>
             ))}
           </select>
