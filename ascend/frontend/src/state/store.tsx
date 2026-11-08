@@ -3,6 +3,7 @@ import { ACHIEVEMENTS, unlockedAchievements } from '../domain/achievements';
 import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
 import { keyOf } from '../domain/dates';
 import {
+  goalProgress,
   activeBonus,
   attributeLevels,
   availableCredits,
@@ -250,6 +251,30 @@ export function AppProvider({
 
   // evenimente: niveluri noi, realizări, provocări
   const prev = prevEvents;
+  // obiective care tocmai au devenit accesibile (ai destule credite și perioada de reflecție a trecut)
+  const affordableRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!state.character) return;
+    const now = new Date().toISOString();
+    const ready = new Set(
+      state.goals.filter((g) => (g.status === 'active' || (g.status === 'reflecting' && g.activatesAt <= now)) && goalProgress(state, g).affordable).map((g) => g.id),
+    );
+    const before = affordableRef.current;
+    if (before) {
+      for (const id of ready) {
+        if (!before.has(id)) {
+          const g = state.goals.find((x) => x.id === id)!;
+          notify({
+            kind: 'achievement',
+            title: `Poți cumpăra: ${g.title}`,
+            body: g.status === 'reflecting' ? 'Confirmă că încă îl vrei, apoi cumpără-l din Vârfuri.' : 'Ai strâns destule credite. Îl găsești în Vârfuri.',
+            action: { label: 'Vezi', run: () => (window.location.hash = '/goals') },
+          });
+        }
+      }
+    }
+    affordableRef.current = ready;
+  }, [state, notify]);
   useEffect(() => {
     if (!state.character) return;
     const attrs = Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, derived.attributes[k].level])) as Record<AttributeKey, number>;

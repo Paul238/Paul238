@@ -200,6 +200,14 @@ export function goalRequiredCredits(goal: Goal, settings: Settings): number {
   return Math.max(1, Math.ceil(goal.price / Math.max(0.0001, settings.leiPerCredit)));
 }
 
+/** progresul unui obiectiv: rezervarea lui + tot ce ai disponibil în portofel (comun tuturor obiectivelor) */
+export function goalProgress(state: AppState, goal: Goal) {
+  const required = goalRequiredCredits(goal, state.settings);
+  const have = Math.min(required, goal.saved + Math.max(0, availableCredits(state)));
+  const missing = required - have;
+  return { required, have, missing, ratio: have / required, affordable: missing <= 0 };
+}
+
 /* ---------- serii (streak) ---------- */
 
 function activeDays(state: AppState): Set<DateKey> {
@@ -604,14 +612,19 @@ export function reducer(state: AppState, action: Action): AppState {
       const goal = state.goals.find((g) => g.id === action.id);
       if (!goal || goal.status !== 'active') return state;
       const required = goalRequiredCredits(goal, state.settings);
-      if (goal.saved < required) return state;
-      const surplus = goal.saved - required;
+      // creditele vin întâi din rezervarea obiectivului, restul automat din portofel
+      const fromWallet = Math.max(0, required - goal.saved);
+      if (fromWallet > availableCredits(state)) return state;
+      const surplus = Math.max(0, goal.saved - required);
       let next: AppState = {
         ...state,
         goals: updateGoal(state, goal.id, (g) => ({ ...g, saved: required, status: 'purchased', purchasedAt: action.now, closedAt: action.now })),
       };
       if (surplus > 0) {
         next = { ...next, ledger: ledger({ id: action.entryId, at: action.now, amount: surplus, kind: 'release', label: `Surplus: ${goal.title}`, ref: goal.id }, next) };
+      }
+      if (fromWallet > 0) {
+        next = { ...next, ledger: ledger({ id: `${action.entryId}-s`, at: action.now, amount: -fromWallet, kind: 'spend', label: `Achiziție: ${goal.title}`, ref: goal.id }, next) };
       }
       if (goal.mode === 'development' && goal.attribute) {
         next = {

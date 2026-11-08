@@ -1,7 +1,7 @@
-import { ArrowDownToLine, ArrowUpFromLine, Coffee, Coins, ExternalLink, GraduationCap, History, Hourglass, Pencil, PiggyBank, Plus, Scale, ShoppingBag, Star, TrendingUp } from 'lucide-react';
+import { Coffee, Coins, ExternalLink, GraduationCap, History, Hourglass, Pencil, PiggyBank, Plus, Scale, ShoppingBag, Star, TrendingUp } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
-import { averageDailyCredits, cooldownFor, developmentXp, goalRequiredCredits, savedInGoals } from '../domain/engine';
+import { averageDailyCredits, cooldownFor, developmentXp, goalProgress, goalRequiredCredits, savedInGoals } from '../domain/engine';
 import type { AttributeKey, Goal, GoalMode } from '../domain/types';
 import { useApp } from '../state/store';
 import { Summit } from '../ui/Art';
@@ -11,7 +11,7 @@ import { fmt, fmtDate, humanHours, lei } from '../ui/format';
 type Tab = GoalMode | 'history';
 
 const MODES: Record<GoalMode, { label: string; icon: ReactNode; blurb: string }> = {
-  shopping: { label: 'Cumpărături', icon: <ShoppingBag size={15} />, blurb: 'Lucruri pe care vrei să le cumperi. Trec printr-o perioadă de reflecție înainte de a primi credite.' },
+  shopping: { label: 'Cumpărături', icon: <ShoppingBag size={15} />, blurb: 'Lucruri pe care vrei să le cumperi. Progresul se vede imediat; cumpărarea devine posibilă după perioada de reflecție.' },
   development: { label: 'Dezvoltare', icon: <GraduationCap size={15} />, blurb: 'Investiții în tine: cursuri, cărți, abonamente. La finalizare primești XP în atributul ales.' },
   leisure: { label: 'Răsfăț', icon: <Coffee size={15} />, blurb: 'Recompense mici: o ieșire, un film, o zi liberă.' },
 };
@@ -23,6 +23,10 @@ export function GoalsView() {
   const pace = averageDailyCredits(state, today);
   const saved = savedInGoals(state);
   const rate = state.settings.leiPerCredit;
+  const closest = state.goals
+    .filter((g) => g.status === 'active' || g.status === 'reflecting')
+    .map((g) => ({ g, p: goalProgress(state, g) }))
+    .sort((a, b) => b.p.ratio - a.p.ratio)[0];
 
   const goals = state.goals.filter((g) => (tab === 'history' ? g.status === 'purchased' || g.status === 'abandoned' : g.mode === tab && (g.status === 'active' || g.status === 'reflecting')));
   const countFor = (m: GoalMode) => state.goals.filter((g) => g.mode === m && (g.status === 'active' || g.status === 'reflecting')).length;
@@ -32,7 +36,7 @@ export function GoalsView() {
       <div className="page-head">
         <div>
           <h1>Obiective și portofel</h1>
-          <p>Creditele câștigate se alocă obiectivelor. Fiecare achiziție are în spate muncă reală.</p>
+          <p>Creditele tale contează automat la toate obiectivele. Când ai destule, cumperi direct de aici.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setEditing('new')}>
           <Plus size={16} /> Obiectiv nou
@@ -49,9 +53,13 @@ export function GoalsView() {
             <small>≈ {lei(derived.available * rate)}</small>
           </div>
         </div>
-        <VaultStat icon={<PiggyBank size={13} />} k="Pus deoparte" v={fmt(saved)} s={`≈ ${lei(saved * rate)} în obiective`} />
+        {closest ? (
+          <VaultStat icon={<PiggyBank size={13} />} k="Cel mai aproape" v={`${Math.floor(closest.p.ratio * 100)}%`} s={closest.p.affordable ? `${closest.g.title} · îl poți cumpăra` : `${closest.g.title} · mai ai ${fmt(closest.p.missing)} cr`} />
+        ) : (
+          <VaultStat icon={<PiggyBank size={13} />} k="Rezervat" v={fmt(saved)} s={`≈ ${lei(saved * rate)} în obiective`} />
+        )}
         <VaultStat icon={<TrendingUp size={13} />} k="Ritm" v={`${fmt(pace)}/zi`} s="media ultimelor 14 zile" />
-        <VaultStat icon={<Scale size={13} />} k="Curs" v={`${rate} lei`} s="valoarea unui credit" />
+        <VaultStat icon={<Scale size={13} />} k="Curs" v={`${rate} ${rate === 1 ? 'leu' : 'lei'}`} s="valoarea unui credit" />
       </section>
 
       <div className="tabs mt-24">
@@ -122,15 +130,15 @@ function useWorkCost(credits: number) {
 }
 
 export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onEdit: () => void }) {
-  const { state, api, now, derived } = useApp();
-  const [modal, setModal] = useState<'allocate' | 'release' | 'purchase' | 'abandon' | null>(null);
-  const required = goalRequiredCredits(goal, state.settings);
-  const missing = Math.max(0, required - goal.saved);
+  const { state, api, now } = useApp();
+  const [modal, setModal] = useState<'purchase' | 'abandon' | null>(null);
+  const { required, have, missing, ratio, affordable } = goalProgress(state, goal);
+  const rate = state.settings.leiPerCredit;
   const cost = useWorkCost(required);
-  const funded = missing === 0;
+  const funded = affordable;
   const reflecting = goal.status === 'reflecting';
   const readyToConfirm = reflecting && goal.activatesAt <= now;
-  const eta = pace > 0 ? Math.ceil(Math.max(0, missing - derived.available) / pace) : null;
+  const eta = pace > 0 ? Math.ceil(missing / pace) : null;
 
   return (
     <div className="card goal-card">
@@ -154,7 +162,7 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
         </div>
       </div>
 
-      <Summit progress={goal.saved / required} funded={funded} variant={goal.title.length} />
+      <Summit progress={ratio} funded={funded} variant={goal.title.length} />
 
       <div className="row-between" style={{ alignItems: 'flex-end' }}>
         <div>
@@ -162,11 +170,21 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
           <div className="muted small">{fmt(required)} credite</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div className="strong num">{Math.floor((goal.saved / required) * 100)}%</div>
-          <div className="muted small">{fmt(goal.saved)} strânse</div>
+          <div className="strong num">{Math.floor(ratio * 100)}%</div>
+          <div className="muted small num">
+            ai {lei(have * rate)} · {fmt(have)} cr
+          </div>
         </div>
       </div>
-      <Bar value={goal.saved / required} color={funded ? 'var(--success)' : 'var(--gold)'} size="lg" />
+      <Bar value={ratio} color={funded ? 'var(--success)' : 'var(--gold)'} size="lg" />
+      {goal.saved > 0 && (
+        <div className="row-between small">
+          <span className="muted">Rezervat doar pentru acest obiectiv: {fmt(goal.saved)} cr</span>
+          <button className="btn btn-ghost btn-sm" onClick={() => api.release(goal.id, goal.saved)}>
+            Eliberează în portofel
+          </button>
+        </div>
+      )}
 
       <div className="goal-facts">
         <div>
@@ -178,8 +196,8 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
           <div className="v">{cost.tasks ? `~${fmt(cost.tasks)} sarcini` : '—'}</div>
         </div>
         <div>
-          <div className="k">Termen estimat</div>
-          <div className="v">{funded ? 'acum' : eta === null ? '—' : eta === 0 ? 'poți aloca acum' : `~${eta} zile`}</div>
+          <div className="k">{funded ? 'Disponibil' : 'Mai ai nevoie de'}</div>
+          <div className="v">{funded ? 'chiar acum' : `${fmt(missing)} cr${eta ? ` · ~${eta} zile` : ''}`}</div>
         </div>
       </div>
 
@@ -190,7 +208,7 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
             <div className="strong">Perioadă de reflecție</div>
             <div className="small text-2">
               {readyToConfirm
-                ? 'Au trecut orele de gândire. Încă îl vrei? Confirmă ca să începi să aloci credite.'
+                ? `Au trecut orele de gândire. Încă îl vrei? Confirmă și ${funded ? 'îl poți cumpăra imediat' : 'vei putea să-l cumperi când ai destule credite'}.`
                 : `Mai ai ${humanHours(Date.parse(goal.activatesAt) - Date.parse(now))} până poți confirma. Gândește-te dacă e o nevoie reală.`}
             </div>
             <div className="row mt-8">
@@ -207,35 +225,17 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
         <div className="row wrap">
           {funded ? (
             <button className="btn btn-gold" onClick={() => setModal('purchase')}>
-              Finalizează achiziția
+              <ShoppingBag size={15} /> Cumpără acum · −{fmt(Math.max(0, required - goal.saved))} cr
             </button>
           ) : (
-            <button className="btn btn-primary" disabled={derived.available <= 0} onClick={() => setModal('allocate')}>
-              <ArrowDownToLine size={15} /> Alocă credite
-            </button>
+            <span className="muted small">Creditele tale contează automat. Continuă pe drum: mai ai {fmt(missing)} credite.</span>
           )}
-          <button className="btn" disabled={goal.saved <= 0} onClick={() => setModal('release')}>
-            <ArrowUpFromLine size={15} /> Retrage
-          </button>
           <button className="btn btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => setModal('abandon')}>
             Renunț
           </button>
         </div>
       )}
 
-      {(modal === 'allocate' || modal === 'release') && (
-        <AmountModal
-          mode={modal}
-          max={modal === 'allocate' ? Math.min(derived.available, missing) : goal.saved}
-          goal={goal}
-          onClose={() => setModal(null)}
-          onConfirm={(n) => {
-            if (modal === 'allocate') api.allocate(goal.id, n);
-            else api.release(goal.id, n);
-            setModal(null);
-          }}
-        />
-      )}
       {modal === 'purchase' && <PurchaseModal goal={goal} required={required} onClose={() => setModal(null)} />}
       {modal === 'abandon' && (
         <Modal
@@ -265,44 +265,6 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
         </Modal>
       )}
     </div>
-  );
-}
-
-function AmountModal({ mode, max, goal, onClose, onConfirm }: { mode: 'allocate' | 'release'; max: number; goal: Goal; onClose: () => void; onConfirm: (n: number) => void }) {
-  const [value, setValue] = useState(Math.floor(max));
-  const { state } = useApp();
-  return (
-    <Modal
-      size="sm"
-      title={mode === 'allocate' ? `Alocă pentru „${goal.title}”` : `Retrage din „${goal.title}”`}
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>
-            Renunță
-          </button>
-          <button className="btn btn-primary" disabled={value <= 0 || value > max} onClick={() => onConfirm(value)}>
-            {mode === 'allocate' ? 'Alocă' : 'Retrage'} {fmt(value)}
-          </button>
-        </>
-      }
-    >
-      <div className="field">
-        <label>Credite</label>
-        <div className="input-suffix">
-          <input className="input num" type="number" min={1} max={max} value={value} onChange={(e) => setValue(Math.max(0, Math.min(max, Math.floor(Number(e.target.value) || 0))))} autoFocus />
-          <span>≈ {lei(value * state.settings.leiPerCredit)}</span>
-        </div>
-        <input type="range" min={0} max={Math.floor(max)} value={value} onChange={(e) => setValue(Number(e.target.value))} style={{ accentColor: 'var(--accent)' }} />
-      </div>
-      <div className="row">
-        {[0.25, 0.5, 1].map((f) => (
-          <button key={f} className="btn btn-sm" onClick={() => setValue(Math.floor(max * f))}>
-            {f === 1 ? 'Maxim' : `${f * 100}%`}
-          </button>
-        ))}
-      </div>
-    </Modal>
   );
 }
 
@@ -340,8 +302,8 @@ function PurchaseModal({ goal, required, onClose }: { goal: Goal; required: numb
       </div>
       <div className="goal-facts">
         <div>
-          <div className="k">Credite folosite</div>
-          <div className="v">{fmt(required)}</div>
+          <div className="k">Se scad din portofel</div>
+          <div className="v">−{fmt(Math.max(0, required - goal.saved))} cr</div>
         </div>
         <div>
           <div className="k">Zile de muncă</div>

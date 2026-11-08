@@ -6,6 +6,7 @@ import {
   calendarDay,
   createEmptyState,
   currentStreak,
+  goalProgress,
   goalRequiredCredits,
   reducer,
   tasksForDay,
@@ -273,5 +274,46 @@ describe('excepții pe zi', () => {
     expect(calendarDay(s, '2026-11-04', '2026-11-03')[0].status).toBe('skipped');
     s = reducer(s, { type: 'task/skipDate', id: 'sala', date: '2026-11-04', skip: false });
     expect(tasksForDay(s, '2026-11-04')).toHaveLength(1);
+  });
+});
+
+describe('obiective cu portofel comun', () => {
+  it('progresul folosește automat creditele disponibile, la toate obiectivele', () => {
+    let s = setup([task('a', { points: 60 })]);
+    s = run(
+      s,
+      { type: 'goal/create', goal: { id: 'g1', title: 'Curs', mode: 'development', price: 100, createdAt: at(0) } },
+      { type: 'goal/create', goal: { id: 'g2', title: 'Carte', mode: 'development', price: 50, createdAt: at(0) } },
+      complete('a', at(0)),
+    );
+    expect(goalProgress(s, s.goals[0])).toMatchObject({ have: 60, missing: 40, affordable: false });
+    expect(goalProgress(s, s.goals[1])).toMatchObject({ have: 50, affordable: true });
+  });
+
+  it('cumpărarea scade automat creditele din portofel', () => {
+    let s = setup([task('a', { points: 60 })]);
+    s = run(
+      s,
+      { type: 'goal/create', goal: { id: 'g', title: 'Carte', mode: 'development', price: 50, createdAt: at(0) } },
+      complete('a', at(0)),
+      { type: 'goal/purchase', id: 'g', now: at(0, 12), entryId: 'p', grantId: 'x' },
+    );
+    expect(s.goals[0].status).toBe('purchased');
+    expect(availableCredits(s)).toBe(10);
+    expect(s.ledger[s.ledger.length - 1]).toMatchObject({ kind: 'spend', amount: -50 });
+  });
+
+  it('nu se poate cumpăra fără destule credite sau în perioada de reflecție', () => {
+    let s = setup([task('a', { points: 30 })]);
+    s = run(
+      s,
+      { type: 'goal/create', goal: { id: 'g', title: 'Carte', mode: 'development', price: 50, createdAt: at(0) } },
+      { type: 'goal/create', goal: { id: 'h', title: 'Joc', mode: 'shopping', price: 10, createdAt: at(0) } },
+      complete('a', at(0)),
+      { type: 'goal/purchase', id: 'g', now: at(0, 12), entryId: 'p', grantId: 'x' },
+      { type: 'goal/purchase', id: 'h', now: at(0, 12), entryId: 'q', grantId: 'y' },
+    );
+    expect(s.goals.map((g) => g.status)).toEqual(['active', 'reflecting']);
+    expect(availableCredits(s)).toBe(30);
   });
 });

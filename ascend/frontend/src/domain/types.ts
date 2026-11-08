@@ -125,7 +125,7 @@ export interface DayResult {
   nutrition?: { totals: MacroTargets; targets: MacroTargets; score: number; credits: number };
 }
 
-export type LedgerKind = 'earn' | 'reversal' | 'allocate' | 'release' | 'adjust';
+export type LedgerKind = 'earn' | 'reversal' | 'allocate' | 'release' | 'adjust' | 'spend';
 
 export interface LedgerEntry {
   id: string;
