@@ -8,7 +8,8 @@ import { AppProvider, useApp } from './state/store';
 import { Toasts } from './ui/components';
 import { AuthView } from './views/AuthView';
 import { CharacterView } from './views/CharacterView';
-import { GoalsView } from './views/GoalsView';
+import { HistoryView } from './views/HistoryView';
+import { MoneyView } from './views/MoneyView';
 import { OnboardingView } from './views/OnboardingView';
 import { SettingsView } from './views/SettingsView';
 import { AppLayout, type AppView } from './views/AppLayout';
@@ -16,7 +17,7 @@ import { HomeView } from './views/HomeView';
 import { PlanView } from './views/PlanView';
 import { TodayList } from './views/TodayList';
 
-const VIEWS: AppView[] = ['home', 'today', 'plan', 'goals'];
+const VIEWS: AppView[] = ['home', 'today', 'plan', 'goals', 'history'];
 
 function useHashView(): [AppView, (v: AppView) => void] {
   const read = () => {
@@ -99,7 +100,8 @@ function Shell() {
         {view === 'home' && <HomeView go={go} openSettings={() => setPanel('settings')} openStats={() => setPanel('stats')} />}
         {view === 'today' && <TodayList onPlanTomorrow={() => (setPlanKey((k) => k + 1), go('plan'))} />}
         {view === 'plan' && <PlanView key={planKey} />}
-        {view === 'goals' && <GoalsView />}
+        {view === 'goals' && <MoneyView />}
+        {view === 'history' && <HistoryView />}
       </AppLayout>
       {panel && (
         <Panel onClose={() => setPanel(null)}>

@@ -232,6 +232,7 @@ export interface AppState {
   meals: MealLog[];
   foods: CustomFood[];
   metrics: import('./metrics').MetricEntry[];
+  shopping: import('./shopping').ShoppingItem[];
   days: Record<DateKey, DayResult>;
   settings: Settings;
   meta: Meta;

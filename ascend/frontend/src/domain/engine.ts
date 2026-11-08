@@ -1,6 +1,7 @@
 import { ATTRIBUTE_KEYS, emptyAttributeRecord } from './attributes';
 import { addDays, addHours, dateKey, daysBetween, keyOf, weekStart, weekday } from './dates';
 import { attrXpToNext, charXpToNext, levelFromXp, type LevelInfo } from './leveling';
+import type { ShoppingItem } from './shopping';
 import { METRIC_MAP, METRIC_XP, plausibleMetric, type MetricEntry } from './metrics';
 import { dayTotals, evaluateTime, hhmmOf, nutritionScore, plausibleFood, targetsFor } from './nutrition';
 import type {
@@ -49,6 +50,7 @@ export function createEmptyState(): AppState {
     meals: [],
     foods: [],
     metrics: [],
+    shopping: [],
     days: {},
     settings: { ...DEFAULT_SETTINGS, cooldownHours: { ...DEFAULT_SETTINGS.cooldownHours } },
     meta: { seenAchievements: [] },
@@ -65,6 +67,7 @@ export function normalizeState(raw: Partial<AppState>): AppState {
     meals: (raw.meals ?? []).map((m) => ({ ...m, foods: m.foods.filter((f) => plausibleFood(f)) })),
     foods: raw.foods ?? [],
     metrics: raw.metrics ?? [],
+    shopping: raw.shopping ?? [],
     days: raw.days ?? {},
     settings: {
       ...base.settings,
@@ -434,6 +437,11 @@ export type Action =
   | { type: 'task/extraDate'; id: string; date: DateKey; add: boolean }
   | { type: 'metric/add'; entry: MetricEntry; grantId: string }
   | { type: 'metric/delete'; id: string }
+  | { type: 'shop/add'; item: ShoppingItem }
+  | { type: 'shop/buy'; id: string; now: string; cost?: number }
+  | { type: 'shop/unbuy'; id: string }
+  | { type: 'shop/update'; id: string; patch: Partial<Pick<ShoppingItem, 'title' | 'qty' | 'cost'>> }
+  | { type: 'shop/delete'; id: string }
   | { type: 'task/complete'; taskId: string; now: string; id: string; value?: string }
   | { type: 'meal/addFood'; date: DateKey; taskId: string; food: FoodEntry; logId: string }
   | { type: 'meal/removeFood'; date: DateKey; taskId: string; foodId: string }
@@ -509,6 +517,28 @@ export function reducer(state: AppState, action: Action): AppState {
           : state.xpGrants,
       };
     }
+
+    case 'shop/add':
+      return action.item.title.trim() ? { ...state, shopping: [...state.shopping, { ...action.item, title: action.item.title.trim() }] } : state;
+
+    case 'shop/buy':
+      return {
+        ...state,
+        shopping: state.shopping.map((i) =>
+          i.id === action.id
+            ? { ...i, boughtAt: action.now, boughtDate: keyOf(action.now), cost: action.cost !== undefined && action.cost >= 0 && action.cost < 1_000_000 ? action.cost : i.cost }
+            : i,
+        ),
+      };
+
+    case 'shop/unbuy':
+      return { ...state, shopping: state.shopping.map((i) => (i.id === action.id ? { ...i, boughtAt: undefined, boughtDate: undefined } : i)) };
+
+    case 'shop/update':
+      return { ...state, shopping: state.shopping.map((i) => (i.id === action.id ? { ...i, ...action.patch } : i)) };
+
+    case 'shop/delete':
+      return { ...state, shopping: state.shopping.filter((i) => i.id !== action.id) };
 
     case 'metric/delete':
       return { ...state, metrics: state.metrics.filter((e) => e.id !== action.id) };

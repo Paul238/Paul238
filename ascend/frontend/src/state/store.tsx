@@ -60,6 +60,11 @@ function createApi(dispatch: (a: Action) => void) {
       dispatch({ type: 'metric/add', entry: { id: uid('m'), metric, date: keyOf(at), at, value, value2 }, grantId: uid('x') });
     },
     deleteMetric: (id: string) => dispatch({ type: 'metric/delete', id }),
+    addShopping: (title: string, qty?: string) => dispatch({ type: 'shop/add', item: { id: uid('s'), title, qty: qty || undefined, createdAt: now() } }),
+    buyShopping: (id: string, cost?: number) => dispatch({ type: 'shop/buy', id, now: now(), cost }),
+    unbuyShopping: (id: string) => dispatch({ type: 'shop/unbuy', id }),
+    updateShopping: (id: string, patch: { title?: string; qty?: string; cost?: number }) => dispatch({ type: 'shop/update', id, patch }),
+    deleteShopping: (id: string) => dispatch({ type: 'shop/delete', id }),
     /** întoarce id-ul completării, ca să poată fi anulată din notificare */
     completeTask: (taskId: string, value?: string) => {
       const id = uid('c');
