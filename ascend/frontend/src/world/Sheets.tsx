@@ -2,7 +2,7 @@ import { Check, Lock, Pencil, Plus, Search, Sparkles, Trash2, Undo2, X } from 'l
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
 import { activeBonus, previousMeal, previewReward, recentFoods, scheduleLabel, tasksForDay, weekCount } from '../domain/engine';
-import { FOOD_DB, dayTotals, evaluateTime, fromMinutes, hhmmOf, nutritionScore, scaleFood, sumFoods, targetsFor, toMinutes } from '../domain/nutrition';
+import { FOOD_DB, MAX_GRAMS, MAX_KCAL, WARN_GRAMS, plausibleFood, dayTotals, evaluateTime, fromMinutes, hhmmOf, nutritionScore, scaleFood, sumFoods, targetsFor, toMinutes } from '../domain/nutrition';
 import type { AttributeKey, MacroTargets, Task } from '../domain/types';
 import { useApp } from '../state/store';
 import { Burst } from '../ui/Art';
@@ -290,7 +290,13 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
 
   const [q, setQ] = useState('');
   const [pick, setPick] = useState<Pick | null>(null);
-  const [amount, setAmount] = useState('100');
+  const [amount, setAmountRaw] = useState('100');
+  // valoarea propusă automat se înlocuiește la prima tastă (nu se lipește la final: 100 + 150 ≠ 100150)
+  const [fresh, setFresh] = useState(true);
+  const setAmount = (v: string) => {
+    setAmountRaw(v);
+    setFresh(true);
+  };
   const [custom, setCustom] = useState(false);
   const [cf, setCf] = useState({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   const [saveCustom, setSaveCustom] = useState(true);
@@ -305,12 +311,15 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
   }, [q, state.foods]);
 
   if (!task) return null;
-  const amt = Number(amount) || 0;
+  const amt = Number(String(amount).replace(',', '.')) || 0;
+  const grams = pick ? (pick.per === '100g' ? amt : amt * 100) : 0;
+  const tooMuch = grams > MAX_GRAMS || (pick?.per === 'portion' && amt > 20);
+  const lotOf = !tooMuch && grams > WARN_GRAMS;
   const computed = pick ? (pick.per === '100g' ? scaleFood(pick, amt) : scaleFood(pick, amt * 100)) : null;
   const mealTotals = sumFoods(foods);
 
   function addPicked() {
-    if (!pick || !computed || amt <= 0) return;
+    if (!pick || !computed || amt <= 0 || tooMuch) return;
     api.addFood(today, taskId, { name: pick.name, grams: pick.per === '100g' ? amt : undefined, ...computed });
     setPick(null);
     setQ('');
@@ -318,7 +327,7 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
 
   function addCustom() {
     const v = { kcal: Number(cf.kcal) || 0, protein: Number(cf.protein) || 0, carbs: Number(cf.carbs) || 0, fat: Number(cf.fat) || 0 };
-    if (!cf.name.trim() || v.kcal <= 0) return;
+    if (!cf.name.trim() || v.kcal <= 0 || !plausibleFood(v)) return;
     api.addFood(today, taskId, { name: cf.name.trim(), ...v });
     if (saveCustom) api.saveFood({ name: cf.name.trim(), per: 'portion', ...v });
     setCf({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
@@ -436,7 +445,27 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               </div>
               <div className="row wrap mt-8">
                 <div className="input-suffix" style={{ width: 130 }}>
-                  <input className="input num" type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+                  <input
+                    className="input num"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={pick.per === '100g' ? MAX_GRAMS : 20}
+                    value={amount}
+                    onChange={(e) => {
+                      setAmountRaw(e.target.value);
+                      setFresh(false);
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={(e) => {
+                      if (fresh && /^[0-9]$/.test(e.key)) {
+                        e.preventDefault();
+                        setAmountRaw(e.key);
+                        setFresh(false);
+                      }
+                    }}
+                    autoFocus
+                  />
                   <span>{pick.per === '100g' ? 'g' : 'porții'}</span>
                 </div>
                 {pick.unit &&
@@ -451,7 +480,10 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
                   <b>{fmt(computed.kcal)} kcal</b> · P {computed.protein} g · C {computed.carbs} g · G {computed.fat} g
                 </div>
               )}
-              <button className="btn btn-primary btn-block mt-12" onClick={addPicked} disabled={amt <= 0}>
+              {pick.per === '100g' && amt >= 1000 && !tooMuch && <div className="hint">= {(amt / 1000).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} kg</div>}
+              {lotOf && <div className="notice notice-warning mt-8">Peste 2 kg dintr-un singur aliment — sigur e corect?</div>}
+              {tooMuch && <div className="error mt-8">Cantitate prea mare ({pick.per === '100g' ? `${fmt(amt)} g` : `${amt} porții`}). Verifică numărul.</div>}
+              <button className="btn btn-primary btn-block mt-12" onClick={addPicked} disabled={amt <= 0 || tooMuch}>
                 <Plus size={16} /> Adaugă în {task.title.toLowerCase()}
               </button>
             </div>
@@ -479,7 +511,7 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
             ).map(([k, l]) => (
               <div key={k} className="field">
                 <label>{l}</label>
-                <input className="input num" type="number" min={0} value={cf[k]} onChange={(e) => setCf({ ...cf, [k]: e.target.value })} />
+                <input className="input num" type="number" min={0} value={cf[k]} onFocus={(e) => e.target.select()} onChange={(e) => setCf({ ...cf, [k]: e.target.value })} />
               </div>
             ))}
           </div>
@@ -487,7 +519,8 @@ export function MealSheet({ taskId, onClose }: { taskId: string; onClose: () => 
             <input type="checkbox" checked={saveCustom} onChange={(e) => setSaveCustom(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
             Salvează în alimentele mele, ca să-l găsesc data viitoare
           </label>
-          <button className="btn btn-primary btn-block mt-12" onClick={addCustom} disabled={!cf.name.trim() || !(Number(cf.kcal) > 0)}>
+          {Number(cf.kcal) > MAX_KCAL && <div className="error mt-8">Peste {fmt(MAX_KCAL)} kcal pentru o porție — verifică numărul.</div>}
+          <button className="btn btn-primary btn-block mt-12" onClick={addCustom} disabled={!cf.name.trim() || !(Number(cf.kcal) > 0) || Number(cf.kcal) > MAX_KCAL}>
             <Plus size={16} /> Adaugă
           </button>
         </div>

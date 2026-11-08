@@ -97,6 +97,18 @@ export function nutritionScore(totals: MacroTargets, targets: MacroTargets) {
 /* Alimente uzuale (valori la 100 g, aproximative)                     */
 /* ------------------------------------------------------------------ */
 
+/** limite de bun-simț pentru o singură intrare */
+export const MAX_GRAMS = 5000;
+export const WARN_GRAMS = 2000;
+export const MAX_KCAL = 10000;
+
+export function plausibleFood(f: { grams?: number; kcal: number; protein: number; carbs: number; fat: number }) {
+  const vals = [f.kcal, f.protein, f.carbs, f.fat];
+  if (vals.some((v) => !Number.isFinite(v) || v < 0)) return false;
+  if (f.kcal > MAX_KCAL || f.protein > 1000 || f.carbs > 2000 || f.fat > 1000) return false;
+  return f.grams === undefined || (f.grams > 0 && f.grams <= MAX_GRAMS);
+}
+
 export interface FoodRef {
   name: string;
   kcal: number;

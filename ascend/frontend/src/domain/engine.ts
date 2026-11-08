@@ -1,7 +1,7 @@
 import { ATTRIBUTE_KEYS, emptyAttributeRecord } from './attributes';
 import { addDays, addHours, dateKey, daysBetween, keyOf, weekStart, weekday } from './dates';
 import { attrXpToNext, charXpToNext, levelFromXp, type LevelInfo } from './leveling';
-import { dayTotals, evaluateTime, hhmmOf, nutritionScore, targetsFor } from './nutrition';
+import { dayTotals, evaluateTime, hhmmOf, nutritionScore, plausibleFood, targetsFor } from './nutrition';
 import type {
   AppState,
   CustomFood,
@@ -59,7 +59,8 @@ export function normalizeState(raw: Partial<AppState>): AppState {
   return {
     ...base,
     ...raw,
-    meals: raw.meals ?? [],
+    // curăță intrările imposibile (ex. 100 kg dintr-un aliment, din cauza unei tastări greșite)
+    meals: (raw.meals ?? []).map((m) => ({ ...m, foods: m.foods.filter((f) => plausibleFood(f)) })),
     foods: raw.foods ?? [],
     days: raw.days ?? {},
     settings: {
@@ -289,7 +290,7 @@ export function recentFoods(state: AppState, limit = 8): FoodEntry[] {
   for (const m of logs) {
     for (const f of [...m.foods].reverse()) {
       const k = f.name.toLowerCase();
-      if (seen.has(k)) continue;
+      if (seen.has(k) || !plausibleFood(f)) continue;
       seen.add(k);
       out.push(f);
       if (out.length >= limit) return out;
@@ -688,6 +689,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, bonuses: state.bonuses.map((b) => (b.id === action.id ? { ...b, revealed: true } : b)) };
 
     case 'meal/addFood': {
+      if (!plausibleFood(action.food)) return state;
       const existing = state.meals.find((m) => m.date === action.date && m.taskId === action.taskId);
       return {
         ...state,

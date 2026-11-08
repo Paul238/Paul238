@@ -73,3 +73,14 @@ describe('nutriție', () => {
     expect(attributeLevels(s).health.total).toBe(55);
   });
 });
+
+describe('cantități greșite', () => {
+  it('refuză 100 kg dintr-un aliment și nu-l pune la recente', async () => {
+    const { recentFoods } = await import('./engine');
+    let s = setup([meal]);
+    s = reducer(s, { type: 'meal/addFood', date: '2026-11-02', taskId: 'm', logId: 'l', food: { id: 'f', name: 'Orez', grams: 100150, kcal: 130195, protein: 1, carbs: 1, fat: 1 } });
+    expect(s.meals).toHaveLength(0);
+    s = reducer(s, { type: 'meal/addFood', date: '2026-11-02', taskId: 'm', logId: 'l', food: { id: 'g', name: 'Orez', grams: 150, kcal: 195, protein: 4, carbs: 42, fat: 0.5 } });
+    expect(recentFoods(s)).toHaveLength(1);
+  });
+});
