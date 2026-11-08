@@ -1,8 +1,7 @@
-import { ChevronRight, Coins, Flame, Gift, Settings, Sparkles, Trophy } from 'lucide-react';
+import { BarChart3, ChevronRight, Coins, Settings, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ATTRIBUTES, ATTRIBUTE_MAP } from '../domain/attributes';
-import { activeBonus, creditsOn, isCompletedOn, scheduleLabel, tasksForDay } from '../domain/engine';
-import { characterTitle } from '../domain/leveling';
+import { creditsOn, isCompletedOn, scheduleLabel, tasksForDay } from '../domain/engine';
 import { latestMetric, metricsFor, metricStatus } from '../domain/metrics';
 import type { AttributeKey, Task } from '../domain/types';
 import { useApp } from '../state/store';
@@ -10,7 +9,7 @@ import { ProfileAvatar } from '../ui/components';
 import { fmt, greeting, lei, longToday } from '../ui/format';
 import { AttrIcon } from '../ui/icons';
 import { StageGlyph } from '../ui/stage';
-import { BonusSheet, ItemSheet, Sheet } from '../world/Sheets';
+import { ItemSheet, Sheet } from '../world/Sheets';
 import { ActivitySearch } from './ActivitySearch';
 import { MetricCard } from './MetricsPanel';
 import { TaskEditor } from './TaskEditor';
@@ -23,10 +22,8 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
   const [attr, setAttr] = useState<AttributeKey | null>(null);
   const [item, setItem] = useState<string | null>(null);
   const [edit, setEdit] = useState<{ task?: Task; attrs?: AttributeKey[] } | null>(null);
-  const [bonusOpen, setBonusOpen] = useState(false);
   const items = useMemo(() => tasksForDay(state, today, { today }), [state, today]);
   const doneN = items.filter((i) => i.completion).length;
-  const bonus = activeBonus(state, now);
   const d = new Date(now);
 
   return (
@@ -39,10 +36,6 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
           </h1>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <span className="stat-pill" title="Zile la rând">
-            <Flame size={15} className={derived.streak.activeToday ? 'flame-on' : undefined} /> <b className="num">{derived.streak.days}</b>
-            {derived.streak.shields > 0 && <small>🛡{derived.streak.shields}</small>}
-          </span>
           <button className="stat-pill gold" onClick={() => go('goals')} title="Credite disponibile">
             <Coins size={15} /> <b className="num">{fmt(derived.available)}</b>
           </button>
@@ -56,28 +49,15 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
         <ActivitySearch mode="log" date={today} onOpen={(t) => setItem(t.id)} suggest={false} />
       </div>
 
-      {bonus && (
-        <button className="home-bonus" onClick={() => (bonus.revealed ? setItem(bonus.taskId) : setBonusOpen(true))}>
-          <Gift size={18} />
-          <span className="grow">
-            <b>{bonus.revealed ? bonus.taskTitle : 'Provocare surpriză'}</b>
-            <small>{bonus.revealed ? `×${bonus.multiplier} puncte dacă o faci azi` : 'Atinge ca s-o descoperi'}</small>
-          </span>
-          <ChevronRight size={16} />
-        </button>
-      )}
 
       {/* personajul și laturile lui */}
       <section className="orbit" aria-label="Personajul și laturile de dezvoltare">
         <div className="orbit-ring" />
         <div className="orbit-center">
-          <ProfileAvatar name={c.name} color={c.color} size={128} progress={derived.level.progress} level={derived.level.level} />
+          <ProfileAvatar name={c.name} color={c.color} size={128} />
           <b className="orbit-name">{c.name.split(' ')[0]}</b>
           <span className="orbit-title">
-            Nivel {derived.level.level} · {characterTitle(derived.level.level)}
-          </span>
-          <span className="orbit-xp-text num">
-            {fmt(derived.level.into)} / {fmt(derived.level.needed)} XP
+            {fmt(derived.level.total)} XP pe cele 8 laturi
           </span>
         </div>
         {ATTRIBUTES.map((a, i) => {
@@ -120,10 +100,10 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
         </button>
         <button className="home-card" onClick={openStats}>
           <span className="home-card-icon">
-            <Trophy size={20} />
+            <BarChart3 size={20} />
           </span>
           <span className="grow">
-            <b>Statistici și realizări</b>
+            <b>Statistici</b>
             <small>{fmt(derived.level.total)} XP total · {lei(derived.available * state.settings.leiPerCredit)} în portofel</small>
           </span>
           <ChevronRight size={16} />
@@ -139,7 +119,6 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
         />
       )}
       {item && <ItemSheet id={item} onClose={() => setItem(null)} onEdit={(t) => setEdit({ task: t })} />}
-      {bonusOpen && <BonusSheet onClose={() => setBonusOpen(false)} />}
       {edit && <TaskEditor task={edit.task} defaultAttributes={edit.attrs} onClose={() => setEdit(null)} />}
     </div>
   );

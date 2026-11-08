@@ -1,5 +1,4 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { ACHIEVEMENTS, unlockedAchievements } from '../domain/achievements';
 import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
 import { keyOf } from '../domain/dates';
 import {
@@ -13,7 +12,6 @@ import {
   type Action,
 } from '../domain/engine';
 import { uid } from '../domain/id';
-import { characterTitle } from '../domain/leveling';
 import type { AppState, AttributeKey, Character, CustomFood, FoodEntry, Goal, Settings, Task } from '../domain/types';
 import type { MetricKey } from '../domain/metrics';
 import type { Session } from '../services/auth';
@@ -292,21 +290,9 @@ export function AppProvider({
       for (const k of ATTRIBUTE_KEYS) {
         if (attrs[k] > p.attrs[k]) notify({ kind: 'level', title: `${ATTRIBUTE_MAP[k].label} · nivelul ${attrs[k]}`, body: 'Atributul a crescut.' });
       }
-      if (derived.level.level > p.level) setCelebration({ level: derived.level.level, title: characterTitle(derived.level.level) });
       if (bonus && bonus.id !== p.bonusId && !bonus.revealed) {
         notify({ kind: 'bonus', title: 'Provocare nouă disponibilă', body: `Ai ${state.settings.bonusWindowHours}h pentru a o finaliza.` });
       }
-    }
-    const unlocked = unlockedAchievements(state);
-    const fresh = unlocked.filter((id) => !state.meta.seenAchievements.includes(id));
-    if (fresh.length) {
-      if (p) {
-        for (const id of fresh) {
-          const a = ACHIEVEMENTS.find((x) => x.id === id)!;
-          notify({ kind: 'achievement', title: `Realizare deblocată: ${a.title}`, body: a.description });
-        }
-      }
-      dispatch({ type: 'meta/seeAchievements', ids: fresh });
     }
     prev.current = { level: derived.level.level, attrs, bonusId: bonus?.id };
   }, [state, derived, notify]);

@@ -1,15 +1,16 @@
-import { Check, Gift, Moon, Sparkles, Utensils, X } from 'lucide-react';
+import { Check, ListPlus, Moon, Utensils, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
-import { activeBonus, creditsOn, previewReward, tasksForDay, type TodayItem } from '../domain/engine';
+import { creditsOn, previewReward, tasksForDay, type TodayItem } from '../domain/engine';
 import { dayTotals, targetsFor, toMinutes } from '../domain/nutrition';
 import type { Task } from '../domain/types';
 import { useApp } from '../state/store';
 import { Burst } from '../ui/Art';
 import { fmt, longToday } from '../ui/format';
 import { StageGlyph, stageStatus } from '../ui/stage';
-import { BonusSheet, ItemSheet, NutritionSheet, RecapSheet } from '../world/Sheets';
+import { ItemSheet, NutritionSheet, RecapSheet } from '../world/Sheets';
 import { ActivitySearch } from './ActivitySearch';
+import { QuickAdd } from './QuickAdd';
 import { TaskEditor } from './TaskEditor';
 
 const PARTS: { label: string; until: number }[] = [
@@ -28,9 +29,10 @@ function partOf(t: Task) {
 /** ecranul „Azi”: tot ce e programat azi, în ordinea zilei */
 export function TodayList({ onPlanTomorrow }: { onPlanTomorrow: () => void }) {
   const { state, api, today, now, notify } = useApp();
-  const [sheet, setSheet] = useState<{ kind: 'item'; id: string } | { kind: 'nutrition' } | { kind: 'recap' } | { kind: 'bonus' } | null>(null);
+  const [sheet, setSheet] = useState<{ kind: 'item'; id: string } | { kind: 'nutrition' } | { kind: 'recap' } | null>(null);
   const [edit, setEdit] = useState<Task | null>(null);
   const [burst, setBurst] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const items = useMemo(() => tasksForDay(state, today, { today }), [state, today]);
   const d = new Date(now);
   const nowMin = d.getHours() * 60 + d.getMinutes();
@@ -42,7 +44,6 @@ export function TodayList({ onPlanTomorrow }: { onPlanTomorrow: () => void }) {
   const doneN = items.filter((i) => i.completion).length;
   const profile = state.settings.nutrition;
   const totals = dayTotals(state, today);
-  const bonus = activeBonus(state, now);
 
   function check(it: TodayItem) {
     if (it.completion) return api.undoCompletion(it.completion.id);
@@ -63,26 +64,28 @@ export function TodayList({ onPlanTomorrow }: { onPlanTomorrow: () => void }) {
             {longToday(d)} · {doneN} din {items.length} făcute · +{fmt(creditsOn(state, today))} credite
           </p>
         </div>
+        <div className="row">
+        <button className="btn" onClick={() => setAdding(!adding)}>
+          <ListPlus size={15} /> Adaugă în program
+        </button>
         <button className="btn" onClick={() => setSheet({ kind: 'recap' })}>
           <Moon size={15} /> Încheie ziua
         </button>
+        </div>
       </div>
 
       <div className="today-progress" aria-hidden="true">
         <span style={{ width: `${items.length ? (doneN / items.length) * 100 : 0}%` }} />
       </div>
 
+      {adding && (
+        <div className="card mb-12">
+          <QuickAdd autoFocus />
+        </div>
+      )}
+
       <ActivitySearch mode="log" date={today} onOpen={(t) => setSheet({ kind: 'item', id: t.id })} suggest={false} />
 
-      {bonus && (
-        <button className="home-bonus mt-12" onClick={() => setSheet(bonus.revealed ? { kind: 'item', id: bonus.taskId } : { kind: 'bonus' })}>
-          {bonus.revealed ? <Sparkles size={18} /> : <Gift size={18} />}
-          <span className="grow">
-            <b>{bonus.revealed ? `Provocare: ${bonus.taskTitle}` : 'Provocare surpriză'}</b>
-            <small>{bonus.revealed ? `×${bonus.multiplier} puncte` : 'Atinge ca s-o descoperi'}</small>
-          </span>
-        </button>
-      )}
 
       {groups.length === 0 && (
         <div className="card empty mt-16">
@@ -98,9 +101,8 @@ export function TodayList({ onPlanTomorrow }: { onPlanTomorrow: () => void }) {
             {list.map((it) => {
               const st = stageStatus(it, nowMin);
               const a = ATTRIBUTE_MAP[it.task.attributes[0] ?? 'discipline'];
-              const isBonus = bonus?.revealed && bonus.taskId === it.task.id;
               return (
-                <div key={it.task.id} className={`trow ${st} ${isBonus ? 'bonus' : ''}`} style={{ ['--c' as string]: a.color }}>
+                <div key={it.task.id} className={`trow ${st}`} style={{ ['--c' as string]: a.color }}>
                   <button className={`tcheck ${it.completion ? 'on' : ''}`} onClick={() => check(it)} aria-label={it.completion ? `Anulează ${it.task.title}` : `Bifează ${it.task.title}`}>
                     {st === 'missed' ? <X size={16} strokeWidth={3} /> : it.completion ? <Check size={16} strokeWidth={3} /> : <StageGlyph task={it.task} size={16} />}
                     {burst === it.task.id && <Burst colors={[a.color, '#ffd36b', '#ff7a59']} />}
@@ -114,7 +116,6 @@ export function TodayList({ onPlanTomorrow }: { onPlanTomorrow: () => void }) {
                       {it.completion?.value ? ` · notat ${it.completion.value}` : ''}
                       {st === 'late' ? (it.overdue ? ' · restanță' : ' · întârziat') : ''}
                       {it.weekProgress ? ` · ${it.weekProgress.done}/${it.weekProgress.target} săptămâna asta` : ''}
-                      {isBonus ? ` · ×${bonus!.multiplier}` : ''}
                     </small>
                   </button>
                   <span className="tpts num">+{it.completion?.credits ?? previewReward(state, it.task, now).credits}</span>
@@ -140,7 +141,6 @@ export function TodayList({ onPlanTomorrow }: { onPlanTomorrow: () => void }) {
 
       {sheet?.kind === 'item' && <ItemSheet id={sheet.id} onClose={() => setSheet(null)} onEdit={(t) => setEdit(t)} />}
       {sheet?.kind === 'nutrition' && <NutritionSheet onClose={() => setSheet(null)} onSetup={() => setSheet(null)} />}
-      {sheet?.kind === 'bonus' && <BonusSheet onClose={() => setSheet(null)} />}
       {sheet?.kind === 'recap' && <RecapSheet onClose={() => setSheet(null)} onNutrition={() => setSheet({ kind: 'nutrition' })} onPlanTomorrow={() => (setSheet(null), onPlanTomorrow())} />}
       {edit && <TaskEditor task={edit} onClose={() => setEdit(null)} />}
     </div>

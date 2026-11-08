@@ -5,7 +5,7 @@ import { APP_VERSION, detectServer } from './services/api';
 import { resolveBackend, type Backend } from './services/backend';
 import type { Loaded } from './services/storage';
 import { AppProvider, useApp } from './state/store';
-import { Modal, Toasts } from './ui/components';
+import { Toasts } from './ui/components';
 import { AuthView } from './views/AuthView';
 import { CharacterView } from './views/CharacterView';
 import { GoalsView } from './views/GoalsView';
@@ -88,7 +88,7 @@ function Panel({ children, onClose }: { children: ReactNode; onClose: () => void
 }
 
 function Shell() {
-  const { state, toasts, dismissToast, celebration, closeCelebration } = useApp();
+  const { state, toasts, dismissToast } = useApp();
   const [view, go] = useHashView();
   const [panel, setPanel] = useState<'settings' | 'stats' | null>(null);
   const [planKey, setPlanKey] = useState(0);
@@ -109,20 +109,6 @@ function Shell() {
       )}
       <Toasts toasts={toasts} onDismiss={dismissToast} />
       <UpdateBanner />
-      {celebration && (
-        <Modal size="sm" title="Nivel nou" onClose={closeCelebration}>
-          <div className="celebrate">
-            <div className="celebrate-level">{celebration.level}</div>
-            <h2 style={{ fontSize: 20, marginTop: 8 }}>Ai ajuns la nivelul {celebration.level}</h2>
-            <p className="muted">
-              Titlu: <strong className="text-2">{celebration.title}</strong>. Consecvența construiește caracter.
-            </p>
-            <button className="btn btn-primary mt-12" onClick={closeCelebration}>
-              Continuă
-            </button>
-          </div>
-        </Modal>
-      )}
     </>
   );
 }

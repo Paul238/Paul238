@@ -1,4 +1,4 @@
-import { ChevronDown, Star, Trash2 } from 'lucide-react';
+import { ChevronDown, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
 import { xpForTask } from '../domain/engine';
@@ -21,17 +21,20 @@ export function TaskEditor({
   defaultSpecial = false,
   defaultAttributes = [],
   defaultSchedule,
+  initial,
 }: {
   task?: Task;
   onClose: () => void;
   defaultSpecial?: boolean;
   defaultAttributes?: AttributeKey[];
   defaultSchedule?: Schedule;
+  /** valori precompletate pentru o sarcină nouă (ex. din adăugarea rapidă) */
+  initial?: Partial<Task>;
 }) {
-  const { api, state } = useApp();
-  const [title, setTitle] = useState(task?.title ?? '');
+  const { api } = useApp();
+  const [title, setTitle] = useState(task?.title ?? initial?.title ?? '');
   const [notes, setNotes] = useState(task?.notes ?? '');
-  const [points, setPoints] = useState(task?.points ?? 15);
+  const [points, setPoints] = useState(task?.points ?? initial?.points ?? 15);
   const [attributes, setAttributesRaw] = useState<AttributeKey[]>(task?.attributes ?? defaultAttributes);
   const [attrTouched, setAttrTouched] = useState(!!task || defaultAttributes.length > 0);
   const [suggested, setSuggested] = useState(false);
@@ -42,17 +45,16 @@ export function TaskEditor({
     setAttributesRaw(v);
   };
   const [schedule, setSchedule] = useState<Schedule>(task?.schedule ?? defaultSchedule ?? { kind: 'daily', days: [] });
-  const [special, setSpecial] = useState(task?.special ?? defaultSpecial);
-  const [kind, setKind] = useState<TaskKind>(task?.kind ?? 'task');
+  const special = task?.special ?? defaultSpecial;
+  const [kind, setKind] = useState<TaskKind>(task?.kind ?? initial?.kind ?? 'task');
   const [onRoad, setOnRoad] = useState<boolean | undefined>(task?.onRoad);
-  const [time, setTime] = useState(task?.time ?? '');
+  const [time, setTime] = useState(task?.time ?? initial?.time ?? '');
   const [timeMode, setTimeMode] = useState<TimeMode>(task?.timeMode ?? 'by');
   const [tolerance, setTolerance] = useState(task?.tolerance ?? 10);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const valid = title.trim().length > 0 && points > 0 && (kind === 'task' || /^\d{2}:\d{2}$/.test(time));
   const preview = xpForTask({ points, attributes } as Task, 1);
-  const mult = state.settings.bonusMultiplier;
 
   function save() {
     if (!valid) return;
@@ -201,22 +203,6 @@ export function TaskEditor({
       </button>
       {more && (
         <>
-      {kind === 'task' && (
-      <div className="card" style={{ padding: 14, background: 'var(--surface-2)' }}>
-        <div className="row-between">
-          <div className="row" style={{ alignItems: 'flex-start' }}>
-            <Star size={16} style={{ color: 'var(--gold)', marginTop: 2 }} fill={special ? 'currentColor' : 'none'} />
-            <div className="col">
-              <span className="strong">Lista specială</span>
-              <span className="muted small">
-                Poate fi aleasă aleatoriu ca provocare: ai 24h să o faci și primești ×{mult} puncte. Bifează doar dacă o poți face oricând.
-              </span>
-            </div>
-          </div>
-          <Switch checked={special} onChange={setSpecial} label="Lista specială" />
-        </div>
-      </div>
-      )}
 
       <div className="field">
         <label>Note (opțional)</label>
@@ -235,7 +221,6 @@ export function TaskEditor({
             +{preview[a]} XP {ATTRIBUTE_MAP[a].label}
           </span>
         ))}
-        {special && <span style={{ color: 'var(--gold)' }}>Ca provocare: +{points * mult} credite</span>}
       </div>
     </Modal>
   );

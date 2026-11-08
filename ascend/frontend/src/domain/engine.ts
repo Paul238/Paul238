@@ -28,10 +28,10 @@ import type {
 export const DEFAULT_SETTINGS: Settings = {
   leiPerCredit: 1,
   cooldownHours: { shopping: 48, development: 0, leisure: 12 },
-  bonusFrequency: 'normal',
+  bonusFrequency: 'off',
   bonusMultiplier: 5,
   bonusWindowHours: 24,
-  streakBonus: true,
+  streakBonus: false,
   restDays: [],
   theme: 'system',
 };
@@ -70,6 +70,9 @@ export function normalizeState(raw: Partial<AppState>): AppState {
       ...base.settings,
       ...(raw.settings ?? {}),
       cooldownHours: { ...base.settings.cooldownHours, ...(raw.settings?.cooldownHours ?? {}) },
+      // fără serii și provocări: aplicația se concentrează pe program, credite și laturi
+      streakBonus: false,
+      bonusFrequency: 'off',
     },
     meta: { ...base.meta, ...(raw.meta ?? {}) },
     version: 1,

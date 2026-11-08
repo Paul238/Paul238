@@ -652,7 +652,7 @@ export function BonusSheet({ onClose }: { onClose: () => void }) {
 /* ---------------- rezumatul zilei (tabăra de seară) ---------------- */
 
 export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: () => void; onNutrition: () => void; onPlanTomorrow: () => void }) {
-  const { state, api, today, derived } = useApp();
+  const { state, api, today } = useApp();
   const todays = state.completions.filter((c) => c.date === today);
   const closed = state.days[today];
   const profile = state.settings.nutrition;
@@ -663,6 +663,7 @@ export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: 
   const xp: Partial<Record<AttributeKey, number>> = {};
   for (const c of todays) for (const [k, v] of Object.entries(c.xp)) xp[k as AttributeKey] = (xp[k as AttributeKey] ?? 0) + (v ?? 0);
   const checks = todays.filter((c) => c.value);
+  const totalXp = Object.values(xp).reduce((a, b) => a + (b ?? 0), 0);
   const left = tasksForDay(state, today, { today }).filter((i) => !i.completion).length;
   const dateLabel = new Date().toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -680,10 +681,8 @@ export function RecapSheet({ onClose, onNutrition, onPlanTomorrow }: { onClose: 
           <small>credite azi</small>
         </div>
         <div>
-          <span className="recap-big num">{derived.streak.days}</span>
-          <small>
-            zile la rând{derived.streak.shields ? ` · 🛡 ${derived.streak.shields}` : ''}
-          </small>
+          <span className="recap-big num">{fmt(totalXp)}</span>
+          <small>XP pe laturi azi</small>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ATTRIBUTE_MAP } from '../domain/attributes';
 import { DEFAULT_SETTINGS, scheduleLabel } from '../domain/engine';
@@ -122,7 +122,7 @@ export function OnboardingView() {
           <section className="onb-section">
             <h1>Ce obiceiuri construiești?</h1>
             <p className="onb-lead">
-              Începe cu 3–5. Cele cu <Star size={13} style={{ verticalAlign: -2 }} /> pot apărea ca provocări surpriză cu puncte ×5.
+              Începe cu 3–5. Le poți schimba oricând din Plan.
             </p>
             <div className="habit-grid">
               {TASK_TEMPLATES.map((t, i) => {
@@ -148,7 +148,6 @@ export function OnboardingView() {
                       <b>{t.title}</b>
                       <small>
                         {scheduleLabel({ schedule: t.schedule } as Task)} · {a.label}
-                        {t.special ? ' · ★' : ''}
                       </small>
                     </span>
                     <span className="habit-pts">+{t.points}</span>

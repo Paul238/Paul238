@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  activeBonus,
   attributeLevels,
   availableCredits,
   calendarDay,
@@ -85,13 +84,6 @@ describe('finalizarea sarcinilor', () => {
 });
 
 describe('serii (streak)', () => {
-  it('crește multiplicatorul cu 1% pe zi de serie', () => {
-    const s = run(setup([task('a')]), complete('a', at(0)), complete('a', at(1)), complete('a', at(2)));
-    expect(currentStreak(s, '2026-11-04').days).toBe(3);
-    expect(s.completions[2].streakMultiplier).toBeCloseTo(1.02);
-    expect(s.completions[2].credits).toBe(20); // 20.4 rotunjit
-  });
-
   it('zilele libere nu întrerup seria', () => {
     let s = setup([task('a')]);
     s = reducer(s, { type: 'settings/update', patch: { restDays: [3] } }); // miercuri liber
@@ -102,65 +94,6 @@ describe('serii (streak)', () => {
   it('o zi ratată resetează seria', () => {
     const s = run(setup([task('a')]), complete('a', at(0)), complete('a', at(2)));
     expect(currentStreak(s, '2026-11-04').days).toBe(1);
-  });
-});
-
-describe('provocări bonus', () => {
-  const tick = (now: string, roll = 0, dropRoll = 0, pickRoll = 0, id = 'b' + n++): Action => ({
-    type: 'bonus/tick',
-    now,
-    roll,
-    dropRoll,
-    pickRoll,
-    id,
-  });
-
-  it('alege doar din lista specială și dă ×5 la bifare', () => {
-    let s = setup([task('normal'), task('spec', { special: true, points: 10 })]);
-    s = run(s, tick(at(0)));
-    const b = activeBonus(s, at(0, 10));
-    expect(b?.taskId).toBe('spec');
-    expect(b?.revealed).toBe(false);
-    s = run(s, complete('spec', at(0, 11)));
-    expect(s.completions[0].credits).toBe(50);
-    expect(s.completions[0].xp.intellect).toBe(50);
-    expect(s.bonuses[0].status).toBe('completed');
-  });
-
-  it('expiră după 24 de ore', () => {
-    let s = run(setup([task('spec', { special: true })]), tick(at(0)));
-    s = run(s, tick(at(1, 10)));
-    expect(s.bonuses[0].status).toBe('expired');
-  });
-
-  it('nu apare nimic dacă lista specială e goală', () => {
-    const s = run(setup([task('a')]), tick(at(0)));
-    expect(s.bonuses).toHaveLength(0);
-  });
-
-  it('respectă probabilitatea și se decide o singură dată pe zi', () => {
-    let s = setup([task('spec', { special: true })]);
-    s = run(s, tick(at(0), 0.9)); // 0.9 > 0.5 (normal) → fără provocare azi
-    s = run(s, tick(at(0, 12), 0));
-    expect(s.bonuses).toHaveLength(0);
-    s = run(s, tick(at(1), 0));
-    expect(s.bonuses).toHaveLength(1);
-  });
-
-  it('apare la o oră aleatorie din zi', () => {
-    let s = setup([task('spec', { special: true })]);
-    s = run(s, tick(at(0, 9), 0, 0.5)); // programată la ~15:00
-    expect(s.bonuses).toHaveLength(0);
-    expect(s.meta.pendingDrop).toBeDefined();
-    s = run(s, tick(at(0, 16)));
-    expect(s.bonuses).toHaveLength(1);
-  });
-
-  it('anularea sarcinii reactivează provocarea', () => {
-    let s = run(setup([task('spec', { special: true })]), tick(at(0)), complete('spec', at(0, 10)));
-    s = reducer(s, { type: 'completion/undo', id: s.completions[0].id, now: at(0, 11), entryId: 'u' });
-    expect(s.bonuses[0].status).toBe('active');
-    expect(availableCredits(s)).toBe(0);
   });
 });
 

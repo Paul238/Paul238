@@ -1,6 +1,5 @@
 import { CalendarDays, ListChecks, Orbit, Settings, Target, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useApp } from '../state/store';
 
 export type AppView = 'home' | 'today' | 'plan' | 'goals';
 
@@ -12,15 +11,12 @@ const NAV: { id: AppView; label: string; icon: ReactNode }[] = [
 ];
 
 export function AppLayout({ view, go, openSettings, children }: { view: AppView; go: (v: AppView) => void; openSettings: () => void; children: ReactNode }) {
-  const { state } = useApp();
-  const todayCount = state.bonuses.some((b) => b.status === 'active' && !b.revealed);
   const items = (
     <>
       {NAV.map((n) => (
         <button key={n.id} className={`nav-item ${view === n.id ? 'active' : ''}`} onClick={() => go(n.id)} aria-current={view === n.id ? 'page' : undefined}>
           {n.icon}
           <span>{n.label}</span>
-          {n.id === 'today' && todayCount && <span className="nav-dot" />}
         </button>
       ))}
     </>

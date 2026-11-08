@@ -47,8 +47,8 @@ export function AuthView({ backend, onAuth }: { backend: Backend; onAuth: (s: Se
               <Feature icon={<Wallet size={17} />} title="Credite pentru obiective reale">
                 Un laptop, un curs, o vacanță — cu termen și progres vizibil.
               </Feature>
-              <Feature icon={<Gift size={17} />} title="Provocări surpriză ×5">
-                Din lista ta specială, la o oră aleatorie, cu 24 de ore pentru a le prinde.
+              <Feature icon={<Gift size={17} />} title="Program flexibil">
+                Zilnic, în anumite zile sau la o dată anume — scris într-un singur rând.
               </Feature>
             </div>
           </div>

@@ -1,15 +1,12 @@
-import { Award, Lock } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ACHIEVEMENTS, achievementStats } from '../domain/achievements';
 import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
 import { addDays, weekStart } from '../domain/dates';
-import { attributeXp, longestStreak, totalEarned } from '../domain/engine';
-import { characterTitle } from '../domain/leveling';
+import { attributeXp, totalEarned } from '../domain/engine';
 import type { AttributeKey } from '../domain/types';
 import { useApp } from '../state/store';
 import { Constellation } from '../ui/Art';
 import { Avatar, Bar } from '../ui/components';
-import { fmt, fmtDate, plural } from '../ui/format';
+import { fmt, fmtDate } from '../ui/format';
 import { AttrBadge } from '../ui/icons';
 
 const WEEKS = 18;
@@ -19,7 +16,6 @@ export function CharacterView() {
   const c = state.character!;
   const xp = attributeXp(state);
   const levels = Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, derived.attributes[k].level])) as Record<AttributeKey, number>;
-  const stats = achievementStats(state);
   const [selected, setSelected] = useState<AttributeKey | null>(null);
 
   const perDay = useMemo(() => {
@@ -80,7 +76,7 @@ export function CharacterView() {
             <div className="row" style={{ alignItems: 'flex-end', gap: 14 }}>
               <span className="big-level num">{derived.level.level}</span>
               <span className="display" style={{ fontSize: 26, paddingBottom: 10, fontStyle: 'italic' }}>
-                {characterTitle(derived.level.level)}
+                nivel general
               </span>
             </div>
           </div>
@@ -98,7 +94,7 @@ export function CharacterView() {
           <div className="grid grid-2" style={{ gap: 10 }}>
             <MiniStat label="Altitudine" value={`${fmt(derived.level.total)} m`} />
             <MiniStat label="Etape urcate" value={fmt(state.completions.length)} />
-            <MiniStat label="Cea mai lungă serie" value={`${longestStreak(state)} ${plural(longestStreak(state), 'zi', 'zile')}`} />
+            <MiniStat label="Activități în program" value={fmt(state.tasks.filter((t) => !t.archived).length)} />
             <MiniStat label="Credite câștigate" value={fmt(totalEarned(state))} />
           </div>
         </div>
@@ -189,34 +185,6 @@ export function CharacterView() {
         </div>
       </div>
 
-      <div className="card-head mt-24">
-        <h2>
-          Realizări <span className="muted">· {ACHIEVEMENTS.filter((a) => a.value(stats) >= a.target).length}/{ACHIEVEMENTS.length}</span>
-        </h2>
-      </div>
-      <div className="grid grid-3">
-        {ACHIEVEMENTS.map((a) => {
-          const v = Math.min(a.target, a.value(stats));
-          const unlocked = v >= a.target;
-          return (
-            <div key={a.id} className={`card ach ${unlocked ? '' : 'locked'}`}>
-              <div className={`ach-icon tier-${a.tier}`}>{unlocked ? <Award size={19} /> : <Lock size={17} />}</div>
-              <div className="grow col" style={{ gap: 4 }}>
-                <span className="strong">{a.title}</span>
-                <span className="muted small">{a.description}</span>
-                {!unlocked && (
-                  <>
-                    <Bar value={v / a.target} size="thin" />
-                    <span className="tiny muted num">
-                      {fmt(v)} / {fmt(a.target)}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </>
   );
 }

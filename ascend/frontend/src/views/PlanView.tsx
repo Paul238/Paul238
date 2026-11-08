@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { addDays } from '../domain/dates';
 import { useApp } from '../state/store';
 import { CalendarView } from './CalendarView';
+import { QuickAdd } from './QuickAdd';
 import { PlanDay, dayName } from './PlanDay';
 import { TasksView } from './TasksView';
 
@@ -17,9 +18,14 @@ export function PlanView({ initial = 'tomorrow' }: { initial?: PlanTab }) {
       <div className="page-head">
         <div>
           <h1>Plan</h1>
-          <p>Ce vine automat, ce adaugi în plus și ce sari.</p>
+          <p>Programul tău: scrie într-un rând ce faci și când — restul se ordonează singur.</p>
         </div>
       </div>
+      {tab !== 'all' && (
+        <div className="card mb-12">
+          <QuickAdd />
+        </div>
+      )}
       <div className="segmented full plan-tabs">
         <button className={tab === 'tomorrow' ? 'active' : ''} onClick={() => setTab('tomorrow')}>
           Mâine

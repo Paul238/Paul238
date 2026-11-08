@@ -1,10 +1,9 @@
-import { AlarmClock, Cloud, Download, Gift, HardDrive, KeyRound, LogOut, Monitor, Moon, Palette, Pencil, Plus, Shield, Sun, Trash2, Upload, User, Utensils, Wallet } from 'lucide-react';
+import { AlarmClock, Cloud, Download, HardDrive, KeyRound, LogOut, Monitor, Moon, Palette, Pencil, Plus, Shield, Sun, Trash2, Upload, User, Utensils, Wallet } from 'lucide-react';
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { WEEKDAY_SHORT, WEEK_ORDER } from '../domain/dates';
-import { BONUS_CHANCE, MAX_SHIELDS, SHIELD_EVERY, averageDailyCredits, createEmptyState, normalizeState, scheduleLabel } from '../domain/engine';
+import { averageDailyCredits, createEmptyState, normalizeState, scheduleLabel } from '../domain/engine';
 import { DEFAULT_NUTRITION, targetsFor } from '../domain/nutrition';
 import { AVATAR_COLORS } from '../domain/templates';
-import type { BonusFrequency, GoalMode, Task } from '../domain/types';
+import type { GoalMode, Task } from '../domain/types';
 import { APP_VERSION } from '../services/api';
 import { useApp } from '../state/store';
 import { Modal, ProfileAvatar, Switch } from '../ui/components';
@@ -12,15 +11,8 @@ import { fmt } from '../ui/format';
 import { NutritionForm, RoutineSetup } from '../world/RoutineSetup';
 import { TaskEditor } from './TaskEditor';
 
-type SectionId = 'profile' | 'day' | 'nutrition' | 'rewards' | 'bonus' | 'account';
+type SectionId = 'profile' | 'day' | 'nutrition' | 'rewards' | 'account';
 
-const FREQ: { v: BonusFrequency; label: string }[] = [
-  { v: 'off', label: 'Oprite' },
-  { v: 'low', label: 'Rar' },
-  { v: 'normal', label: 'Moderat' },
-  { v: 'high', label: 'Des' },
-  { v: 'daily', label: 'Zilnic' },
-];
 
 function timeRule(t: Task) {
   if (t.kind === 'meal') return `Masă · în jur de ${t.time}`;
@@ -68,8 +60,7 @@ export function SettingsView() {
     { id: 'profile', icon: <User size={17} />, label: 'Profil și aspect', status: `${c.name} · ${s.theme === 'system' ? 'tema sistemului' : s.theme === 'dark' ? 'întunecat' : 'luminos'}` },
     { id: 'day', icon: <AlarmClock size={17} />, label: 'Ziua mea', status: routine.length ? `${routine.length} repere și mese` : 'neconfigurată' },
     { id: 'nutrition', icon: <Utensils size={17} />, label: 'Nutriție', status: s.nutrition ? `${fmt(targetsFor(s.nutrition).kcal)} kcal / zi` : 'oprită' },
-    { id: 'rewards', icon: <Wallet size={17} />, label: 'Recompense și serie', status: `1 credit = ${s.leiPerCredit} ${s.leiPerCredit === 1 ? 'leu' : 'lei'}` },
-    { id: 'bonus', icon: <Gift size={17} />, label: 'Provocări surpriză', status: s.bonusFrequency === 'off' ? 'oprite' : `${FREQ.find((f) => f.v === s.bonusFrequency)!.label.toLowerCase()} · ×${s.bonusMultiplier}` },
+    { id: 'rewards', icon: <Wallet size={17} />, label: 'Credite și obiective', status: `1 credit = ${s.leiPerCredit} ${s.leiPerCredit === 1 ? 'leu' : 'lei'}` },
     { id: 'account', icon: <Shield size={17} />, label: 'Cont și date', status: backend.kind === 'server' ? 'sincronizat cu serverul' : 'doar în acest browser' },
   ];
 
@@ -194,7 +185,7 @@ export function SettingsView() {
           )}
 
           {section === 'rewards' && (
-            <Section title="Recompense și serie" desc="Cât valorează munca ta și cât de iertătoare e seria.">
+            <Section title="Credite și obiective" desc="Cât valorează un credit și cât timp de gândire ai înainte de o cumpărare.">
               <Row title="Valoarea unui credit" desc={`Exemplu: un laptop de 6.000 lei = ${fmt(Math.ceil(6000 / s.leiPerCredit))} credite${pace > 0 ? ` ≈ ${Math.ceil(6000 / s.leiPerCredit / pace)} zile la ritmul tău` : ''}.`}>
                 <NumberInput value={s.leiPerCredit} step={0.1} min={0.1} suffix="lei" onChange={(v) => api.updateSettings({ leiPerCredit: Math.max(0.1, v) })} />
               </Row>
@@ -207,63 +198,9 @@ export function SettingsView() {
               <Row title="Timp de gândire · dezvoltare" desc="Investițiile în tine pot avea 0 ore.">
                 <NumberInput value={s.cooldownHours.development} min={0} suffix="ore" onChange={(v) => setCooldown('development', v)} />
               </Row>
-              <Row title="Bonus de serie" desc="+1% credite pentru fiecare zi la rând cu activitate (maxim +30%).">
-                <Switch checked={s.streakBonus} onChange={(v) => api.updateSettings({ streakBonus: v })} label="Bonus de serie" />
-              </Row>
-              <Row title="Scuturi de serie" desc={`La fiecare ${SHIELD_EVERY} zile active primești un scut (maxim ${MAX_SHIELDS}). O zi ratată consumă un scut în loc să rupă seria.`}>
-                <span className="badge badge-accent">automat</span>
-              </Row>
-              <Row title="Zile libere" desc="În aceste zile poți face pauză fără să pierzi seria.">
-                <div className="weekday-picker">
-                  {WEEK_ORDER.map((d) => (
-                    <button
-                      key={d}
-                      className={s.restDays.includes(d) ? 'on' : ''}
-                      onClick={() => api.updateSettings({ restDays: s.restDays.includes(d) ? s.restDays.filter((x) => x !== d) : [...s.restDays, d] })}
-                      aria-pressed={s.restDays.includes(d)}
-                    >
-                      {WEEKDAY_SHORT[d]}
-                    </button>
-                  ))}
-                </div>
-              </Row>
             </Section>
           )}
 
-          {section === 'bonus' && (
-            <Section title="Provocări surpriză" desc="Din când în când, pe drum apare un cufăr cu o sarcină din lista ta specială (★). Dacă o faci în timpul dat, primești puncte multiplicate.">
-              <Row title="Cât de des" desc={s.bonusFrequency === 'off' ? 'Nu apar provocări.' : `Șansă de ${Math.round(BONUS_CHANCE[s.bonusFrequency] * 100)}% pe zi, la o oră aleatorie.`}>
-                <div className="segmented">
-                  {FREQ.map((f) => (
-                    <button key={f.v} className={s.bonusFrequency === f.v ? 'active' : ''} onClick={() => api.updateSettings({ bonusFrequency: f.v })}>
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </Row>
-              <Row title="Multiplicator" desc="De câte ori se înmulțesc punctele și XP-ul.">
-                <div className="segmented">
-                  {[2, 3, 5, 10].map((m) => (
-                    <button key={m} className={s.bonusMultiplier === m ? 'active' : ''} onClick={() => api.updateSettings({ bonusMultiplier: m })}>
-                      ×{m}
-                    </button>
-                  ))}
-                </div>
-              </Row>
-              <Row title="Timp de realizare" desc="Cât timp ai la dispoziție după ce apare.">
-                <div className="segmented">
-                  {[6, 12, 24, 48].map((h) => (
-                    <button key={h} className={s.bonusWindowHours === h ? 'active' : ''} onClick={() => api.updateSettings({ bonusWindowHours: h })}>
-                      {h} h
-                    </button>
-                  ))}
-                </div>
-              </Row>
-              <Row title="Lista specială" desc={`${state.tasks.filter((t) => t.special && !t.archived).length} sarcini pot deveni provocări. Le marchezi cu ★ în Sarcini.`}>
-                <span />
-              </Row>
-            </Section>
-          )}
 
           {section === 'account' && (
             <Section title="Cont și date" desc="Unde stau datele tale și cum le păstrezi în siguranță.">
