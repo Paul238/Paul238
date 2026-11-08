@@ -7,9 +7,8 @@ import { AVATAR_COLORS } from '../domain/templates';
 import type { BonusFrequency, GoalMode, Task } from '../domain/types';
 import { APP_VERSION } from '../services/api';
 import { useApp } from '../state/store';
-import { Modal, Switch } from '../ui/components';
+import { Modal, ProfileAvatar, Switch } from '../ui/components';
 import { fmt } from '../ui/format';
-import { Hiker } from '../world/Hiker';
 import { NutritionForm, RoutineSetup } from '../world/RoutineSetup';
 import { TaskEditor } from './TaskEditor';
 
@@ -98,12 +97,12 @@ export function SettingsView() {
 
         <div className="settings-body">
           {section === 'profile' && (
-            <Section title="Profil și aspect" desc="Cum arăți pe drum și cum arată aplicația.">
+            <Section title="Profil și aspect" desc="Numele, culoarea și aspectul aplicației.">
               <div className="settings-hero" style={{ ['--c' as string]: c.color }}>
-                <Hiker color={c.color} walking={false} bag={0} bump={0} />
+                <ProfileAvatar name={c.name} color={c.color} size={72} />
                 <div>
                   <b className="display" style={{ fontSize: 22 }}>{c.name}</b>
-                  <div className="muted small">așa te văd pe drum</div>
+                  <div className="muted small">avatarul tău în aplicație</div>
                 </div>
               </div>
               <Row title="Nume">
@@ -116,7 +115,7 @@ export function SettingsView() {
                   ))}
                 </div>
               </Row>
-              <Row title="Tema panourilor" desc="Lumea de pe drum urmează ora reală; tema se aplică listelor și setărilor.">
+              <Row title="Tema panourilor" desc="Întunecat, luminos sau după setarea sistemului.">
                 <div className="segmented">
                   {(
                     [

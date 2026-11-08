@@ -10,10 +10,10 @@ import { useApp } from '../state/store';
 import { fmt, lei } from '../ui/format';
 import { AttrIcon } from '../ui/icons';
 import { DEFAULT_PLAN, DayPlanForm, planToTasks, type DayPlan } from '../world/DayPlan';
-import { Hiker } from '../world/Hiker';
+import { ProfileAvatar } from '../ui/components';
 import { NutritionForm } from '../world/RoutineSetup';
 
-const STEPS = ['Tu', 'Ziua ta', 'Obiceiuri', 'Nutriție', 'Primul vârf'];
+const STEPS = ['Tu', 'Ziua ta', 'Obiceiuri', 'Nutriție', 'Primul obiectiv'];
 const GOAL_IDEAS: [string, number][] = [
   ['Laptop', 6000],
   ['Telefon nou', 3500],
@@ -86,14 +86,14 @@ export function OnboardingView() {
 
         {step === 0 && (
           <section className="onb-section">
-            <h1>Acesta ești tu.</h1>
-            <p className="onb-lead">Fiecare zi e un drum. Ce faci, pui în rucsac: credite pentru lucrurile pe care ți le dorești și niveluri pentru cine vrei să devii.</p>
-            <div className="onb-hero-preview" style={{ ['--c' as string]: color }}>
-              <div className="onb-road" />
-              <div className="onb-hiker">
-                <Hiker color={color} walking bag={3} bump={0} />
+            <h1>Profilul tău</h1>
+            <p className="onb-lead">Fiecare activitate îți crește una dintre cele 8 laturi și îți aduce credite pentru obiectivele tale.</p>
+            <div className="onb-avatar-card">
+              <ProfileAvatar name={name || '?'} color={color} size={96} progress={0.15} level={1} />
+              <div>
+                <b className="onb-avatar-name">{name || '…'}</b>
+                <div className="muted small">Nivel 1 · Începător · 8 laturi de dezvoltare</div>
               </div>
-              <span className="onb-name">{name || '…'}</span>
             </div>
             <div className="field mt-16">
               <label>Cum te cheamă?</label>
@@ -181,7 +181,7 @@ export function OnboardingView() {
 
         {step === 4 && (
           <section className="onb-section">
-            <h1>Primul tău vârf</h1>
+            <h1>Primul tău obiectiv</h1>
             <p className="onb-lead">Ce ți-ai dori să cumperi din munca ta? Va sta 48 de ore „în reflecție” înainte să poți strânge credite pentru el — ca să fie o decizie, nu un impuls.</p>
             <div className="row wrap">
               {GOAL_IDEAS.map(([t, p]) => (

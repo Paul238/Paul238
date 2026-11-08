@@ -222,6 +222,18 @@ export function goalProgress(state: AppState, goal: Goal) {
   return { required, have, missing, ratio: have / required, affordable: missing <= 0 };
 }
 
+/** plan spre termen: câte zile mai sunt, câte credite pe zi îți trebuie și dacă ritmul tău ajunge */
+export function goalDeadlinePlan(state: AppState, goal: Goal, today: DateKey) {
+  if (!goal.deadline) return null;
+  const { missing } = goalProgress(state, goal);
+  const daysLeft = daysBetween(today, goal.deadline);
+  const pace = averageDailyCredits(state, today);
+  const perDay = daysLeft > 0 ? Math.ceil(missing / daysLeft) : missing;
+  const status: 'done' | 'overdue' | 'onTrack' | 'behind' =
+    missing <= 0 ? 'done' : daysLeft < 0 ? 'overdue' : pace >= perDay ? 'onTrack' : 'behind';
+  return { daysLeft, perDay, pace, status, missing };
+}
+
 /* ---------- serii (streak) ---------- */
 
 function activeDays(state: AppState): Set<DateKey> {
@@ -428,7 +440,7 @@ export type Action =
   | { type: 'day/autoclose'; today: DateKey; now: string; seed: string }
   | { type: 'completion/undo'; id: string; now: string; entryId: string }
   | { type: 'goal/create'; goal: Omit<Goal, 'status' | 'saved' | 'activatesAt'> }
-  | { type: 'goal/update'; id: string; patch: Partial<Pick<Goal, 'title' | 'price' | 'reason' | 'url' | 'attribute' | 'mode'>> }
+  | { type: 'goal/update'; id: string; patch: Partial<Pick<Goal, 'title' | 'price' | 'reason' | 'url' | 'attribute' | 'mode' | 'deadline'>> }
   | { type: 'goal/confirm'; id: string; now: string }
   | { type: 'goal/allocate'; id: string; amount: number; now: string; entryId: string }
   | { type: 'goal/release'; id: string; amount: number; now: string; entryId: string }

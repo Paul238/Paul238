@@ -1,4 +1,4 @@
-import { Mountain, X } from 'lucide-react';
+import { Orbit, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Session } from './services/auth';
 import { APP_VERSION, detectServer } from './services/api';
@@ -138,7 +138,7 @@ function Splash({ children }: { children?: ReactNode }) {
     <div style={{ minHeight: '100%', display: 'grid', placeItems: 'center', padding: 24 }}>
       <div className="col" style={{ alignItems: 'center', gap: 14, textAlign: 'center' }}>
         <div className="brand-mark" style={{ width: 44, height: 44, borderRadius: 12 }}>
-          <Mountain size={22} />
+          <Orbit size={22} />
         </div>
         {children ?? <span className="muted">Se încarcă…</span>}
       </div>

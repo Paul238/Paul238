@@ -160,6 +160,8 @@ export interface Goal {
   activatesAt: ISODate;
   purchasedAt?: ISODate;
   closedAt?: ISODate;
+  /** termenul până la care vrei să-l atingi */
+  deadline?: DateKey;
   /** prețul real plătit (lei) și creditele scăzute la achiziție */
   paidPrice?: number;
   paidCredits?: number;

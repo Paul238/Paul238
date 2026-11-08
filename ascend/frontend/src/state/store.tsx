@@ -275,7 +275,7 @@ export function AppProvider({
           notify({
             kind: 'achievement',
             title: `Poți cumpăra: ${g.title}`,
-            body: g.status === 'reflecting' ? 'Confirmă că încă îl vrei, apoi cumpără-l din Vârfuri.' : 'Ai strâns destule credite. Îl găsești în Vârfuri.',
+            body: g.status === 'reflecting' ? 'Confirmă că încă îl vrei, apoi cumpără-l din Obiective.' : 'Ai strâns destule credite. Îl găsești în Obiective.',
             action: { label: 'Vezi', run: () => (window.location.hash = '/goals') },
           });
         }

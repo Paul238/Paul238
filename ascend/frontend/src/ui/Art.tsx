@@ -117,54 +117,6 @@ export function Constellation({
 }
 
 /* ------------------------------------------------------------------ */
-/* Vârful unui obiectiv: muntele se umple cu aur pe măsură ce strângi.  */
-/* ------------------------------------------------------------------ */
-
-let summitSeq = 0;
-
-export function Summit({ progress, funded, variant = 0 }: { progress: number; funded: boolean; variant?: number }) {
-  const uid = useMemo(() => `sm${summitSeq++}`, []);
-  const shapes = [
-    'M0 110 L38 78 L62 88 L104 24 L132 58 L152 46 L200 92 L240 110Z',
-    'M0 110 L50 70 L80 82 L120 30 L150 64 L176 52 L240 110Z',
-    'M0 110 L30 92 L70 54 L96 70 L128 20 L168 72 L200 60 L240 110Z',
-  ];
-  const peaks: [number, number][] = [
-    [104, 24],
-    [120, 30],
-    [128, 20],
-  ];
-  const v = Math.abs(variant) % shapes.length;
-  const [px, py] = peaks[v];
-  const p = Math.max(0, Math.min(1, progress));
-  const level = 110 - p * (110 - py);
-
-  return (
-    <svg viewBox="0 0 240 110" className="summit" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-      <defs>
-        <clipPath id={`${uid}-clip`}>
-          <path d={shapes[v]} />
-        </clipPath>
-        <linearGradient id={`${uid}-gold`} x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stopColor="#ff8a4d" />
-          <stop offset="1" stopColor="#ffd36b" />
-        </linearGradient>
-      </defs>
-      <path d="M0 110 L60 70 L110 86 L170 50 L240 84 L240 110Z" className="summit-back" />
-      <path d={shapes[v]} className="summit-body" />
-      <g clipPath={`url(#${uid}-clip)`}>
-        <rect x="0" y={level} width="240" height={110 - level} fill={`url(#${uid}-gold)`} className="summit-fill" />
-        <rect x="0" y={level} width="240" height="2" fill="#fff" opacity="0.6" className="summit-fill" />
-      </g>
-      <g transform={`translate(${px} ${py})`}>
-        <line x1="0" y1="0" x2="0" y2="-20" stroke="currentColor" strokeOpacity={funded ? 0.9 : 0.35} strokeWidth="1.5" />
-        <path d="M0 -20 L14 -16 L0 -12Z" fill={funded ? '#ffd36b' : 'currentColor'} opacity={funded ? 1 : 0.3} className={funded ? 'flag-wave' : undefined} />
-      </g>
-    </svg>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Explozie de particule la finalizarea unei sarcini.                   */
 /* ------------------------------------------------------------------ */
 

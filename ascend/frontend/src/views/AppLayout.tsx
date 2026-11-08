@@ -1,4 +1,4 @@
-import { CalendarDays, ListChecks, Mountain, Settings, Target, UserRound } from 'lucide-react';
+import { CalendarDays, ListChecks, Orbit, Settings, Target, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useApp } from '../state/store';
 
@@ -8,7 +8,7 @@ const NAV: { id: AppView; label: string; icon: ReactNode }[] = [
   { id: 'home', label: 'Personaj', icon: <UserRound size={20} /> },
   { id: 'today', label: 'Azi', icon: <ListChecks size={20} /> },
   { id: 'plan', label: 'Plan', icon: <CalendarDays size={20} /> },
-  { id: 'goals', label: 'Vârfuri', icon: <Target size={20} /> },
+  { id: 'goals', label: 'Obiective', icon: <Target size={20} /> },
 ];
 
 export function AppLayout({ view, go, openSettings, children }: { view: AppView; go: (v: AppView) => void; openSettings: () => void; children: ReactNode }) {
@@ -30,7 +30,7 @@ export function AppLayout({ view, go, openSettings, children }: { view: AppView;
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">
-            <Mountain size={16} />
+            <Orbit size={16} />
           </div>
           Ascend
         </div>

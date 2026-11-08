@@ -6,10 +6,10 @@ import { characterTitle } from '../domain/leveling';
 import { latestMetric, metricsFor, metricStatus } from '../domain/metrics';
 import type { AttributeKey, Task } from '../domain/types';
 import { useApp } from '../state/store';
+import { ProfileAvatar } from '../ui/components';
 import { fmt, greeting, lei, longToday } from '../ui/format';
 import { AttrIcon } from '../ui/icons';
 import { StageGlyph } from '../ui/stage';
-import { Hiker } from '../world/Hiker';
 import { BonusSheet, ItemSheet, Sheet } from '../world/Sheets';
 import { ActivitySearch } from './ActivitySearch';
 import { MetricCard } from './MetricsPanel';
@@ -35,7 +35,7 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
         <div>
           <div className="eyebrow-label">{longToday(d)}</div>
           <h1 className="home-hello">
-            {greeting(d)}, <em>{c.name.split(' ')[0]}</em>
+            {greeting(d)}, {c.name.split(' ')[0]}
           </h1>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -71,16 +71,14 @@ export function HomeView({ go, openSettings, openStats }: { go: (v: AppView) => 
       <section className="orbit" aria-label="Personajul și laturile de dezvoltare">
         <div className="orbit-ring" />
         <div className="orbit-center">
-          <div className="orbit-hero" style={{ ['--c' as string]: c.color }}>
-            <Hiker color={c.color} walking={false} bag={0} bump={0} />
-          </div>
+          <ProfileAvatar name={c.name} color={c.color} size={128} progress={derived.level.progress} level={derived.level.level} />
           <b className="orbit-name">{c.name.split(' ')[0]}</b>
           <span className="orbit-title">
             Nivel {derived.level.level} · {characterTitle(derived.level.level)}
           </span>
-          <div className="orbit-xp" title={`${fmt(derived.level.into)} / ${fmt(derived.level.needed)} XP`}>
-            <span style={{ width: `${derived.level.progress * 100}%` }} />
-          </div>
+          <span className="orbit-xp-text num">
+            {fmt(derived.level.into)} / {fmt(derived.level.needed)} XP
+          </span>
         </div>
         {ATTRIBUTES.map((a, i) => {
           const l = derived.attributes[a.key];

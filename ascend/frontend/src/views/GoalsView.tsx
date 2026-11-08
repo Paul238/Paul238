@@ -1,10 +1,11 @@
-import { Coffee, Coins, ExternalLink, GraduationCap, History, Hourglass, Pencil, PiggyBank, Plus, Scale, ShoppingBag, Star, TrendingUp } from 'lucide-react';
+import { CalendarClock, Coffee, Coins, ExternalLink, GraduationCap, History, Hourglass, Pencil, PiggyBank, Plus, Scale, ShoppingBag, Star, TrendingUp } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { ATTRIBUTE_KEYS, ATTRIBUTE_MAP } from '../domain/attributes';
-import { averageDailyCredits, cooldownFor, developmentXp, goalProgress, goalRequiredCredits, savedInGoals } from '../domain/engine';
+import { averageDailyCredits, cooldownFor, developmentXp, goalDeadlinePlan, goalProgress, goalRequiredCredits, savedInGoals } from '../domain/engine';
 import type { AttributeKey, Goal, GoalMode } from '../domain/types';
+import { daysBetween, dateKey } from '../domain/dates';
+import { todayKey } from '../domain/engine';
 import { useApp } from '../state/store';
-import { Summit } from '../ui/Art';
 import { Bar, Modal } from '../ui/components';
 import { fmt, fmtDate, humanHours, lei } from '../ui/format';
 
@@ -133,9 +134,10 @@ function useWorkCost(credits: number) {
 }
 
 export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onEdit: () => void }) {
-  const { state, api, now } = useApp();
+  const { state, api, now, today } = useApp();
   const [modal, setModal] = useState<'purchase' | 'abandon' | null>(null);
   const { required, have, missing, ratio, affordable } = goalProgress(state, goal);
+  const plan = goalDeadlinePlan(state, goal, today);
   const rate = state.settings.leiPerCredit;
   const cost = useWorkCost(required);
   const funded = affordable;
@@ -165,7 +167,6 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
         </div>
       </div>
 
-      <Summit progress={ratio} funded={funded} variant={goal.title.length} />
 
       <div className="row-between" style={{ alignItems: 'flex-end' }}>
         <div>
@@ -180,6 +181,27 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
         </div>
       </div>
       <Bar value={ratio} color={funded ? 'var(--success)' : 'var(--gold)'} size="lg" />
+      {plan && (
+        <div className={`deadline deadline-${plan.status}`}>
+          <CalendarClock size={16} />
+          <span className="grow">
+            <b>
+              Termen: {fmtDate(goal.deadline! + 'T12:00', { day: 'numeric', month: 'long', year: 'numeric' })}
+              {plan.status !== 'done' && (plan.daysLeft >= 0 ? ` · ${plan.daysLeft} ${plan.daysLeft === 1 ? 'zi' : 'zile'} rămase` : ` · depășit cu ${-plan.daysLeft} zile`)}
+            </b>
+            <small>
+              {plan.status === 'done'
+                ? 'Ai strâns tot ce trebuie înainte de termen.'
+                : plan.status === 'overdue'
+                  ? `Mai lipsesc ${fmt(plan.missing)} cr. Mută termenul sau continuă.`
+                  : `Îți trebuie ~${fmt(plan.perDay)} cr/zi · ritmul tău: ${fmt(plan.pace)} cr/zi`}
+            </small>
+          </span>
+          <span className={`badge ${plan.status === 'onTrack' || plan.status === 'done' ? 'badge-success' : 'badge-warning'}`}>
+            {plan.status === 'onTrack' ? 'în grafic' : plan.status === 'done' ? 'gata' : plan.status === 'behind' ? 'în urmă' : 'depășit'}
+          </span>
+        </div>
+      )}
       {goal.saved > 0 && (
         <div className="row-between small">
           <span className="muted">Rezervat doar pentru acest obiectiv: {fmt(goal.saved)} cr</span>
@@ -468,6 +490,7 @@ export function GoalEditor({ goal, defaultMode, onClose }: { goal?: Goal; defaul
   const [reason, setReason] = useState(goal?.reason ?? '');
   const [url, setUrl] = useState(goal?.url ?? '');
   const [attribute, setAttribute] = useState<AttributeKey | ''>(goal?.attribute ?? '');
+  const [deadline, setDeadline] = useState(goal?.deadline ?? '');
   const p = Number(price);
   const credits = p > 0 ? Math.ceil(p / state.settings.leiPerCredit) : 0;
   const cost = useWorkCost(credits);
@@ -476,7 +499,7 @@ export function GoalEditor({ goal, defaultMode, onClose }: { goal?: Goal; defaul
 
   function save() {
     if (!valid) return;
-    const data = { title: title.trim(), mode, price: p, reason: reason.trim() || undefined, url: url.trim() || undefined, attribute: mode === 'development' && attribute ? attribute : undefined };
+    const data = { title: title.trim(), mode, price: p, reason: reason.trim() || undefined, url: url.trim() || undefined, attribute: mode === 'development' && attribute ? attribute : undefined, deadline: deadline || undefined };
     if (goal) api.updateGoal(goal.id, data);
     else api.createGoal(data);
     onClose();
@@ -535,6 +558,34 @@ export function GoalEditor({ goal, defaultMode, onClose }: { goal?: Goal; defaul
         </div>
       )}
       <div className="field">
+        <label>Până când vrei să-l atingi? (opțional)</label>
+        <div className="row wrap">
+          <input className="input" type="date" value={deadline} min={todayKey()} onChange={(e) => setDeadline(e.target.value)} style={{ width: 180 }} />
+          {[
+            ['1 lună', 1],
+            ['3 luni', 3],
+            ['6 luni', 6],
+            ['1 an', 12],
+          ].map(([l, m]) => (
+            <button key={l} type="button" className="chip" onClick={() => setDeadline(monthsFromNow(m as number))}>
+              {l}
+            </button>
+          ))}
+          {deadline && (
+            <button type="button" className="chip" onClick={() => setDeadline('')}>
+              Fără termen
+            </button>
+          )}
+        </div>
+        {deadline && credits > 0 && (
+          <span className="hint">
+            ≈ {fmt(Math.ceil(credits / Math.max(1, daysBetween(todayKey(), deadline))))} credite pe zi ca să-l atingi la timp
+            {cost.days ? ` · ritmul tău actual: ~${fmt(Math.ceil(credits / cost.days))} cr/zi` : ''}.
+          </span>
+        )}
+      </div>
+
+      <div className="field">
         <label>De ce îl vrei?</label>
         <textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="ex. Laptopul actual nu mai face față proiectelor" />
         <span className="hint">Formularea motivului te ajută să deosebești o nevoie de un impuls.</span>
@@ -566,4 +617,10 @@ export function GoalEditor({ goal, defaultMode, onClose }: { goal?: Goal; defaul
       )}
     </Modal>
   );
+}
+
+function monthsFromNow(m: number) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + m);
+  return dateKey(d);
 }

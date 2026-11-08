@@ -220,3 +220,34 @@ export function Toasts({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id:
     </div>
   );
 }
+
+/** avatarul personajului: inițiale pe culoarea ta, cu inel de progres spre nivelul următor */
+export function ProfileAvatar({ name, color, size = 120, progress, level }: { name: string; color: string; size?: number; progress?: number; level?: number }) {
+  const stroke = Math.max(4, Math.round(size / 22));
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="pavatar" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={stroke} />
+        {progress !== undefined && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={`${c * Math.max(0, Math.min(1, progress))} ${c}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        )}
+      </svg>
+      <span className="pavatar-face" style={{ background: color, inset: stroke + 4, fontSize: size * 0.3 }}>
+        {initials(name)}
+      </span>
+      {level !== undefined && <span className="pavatar-level num">{level}</span>}
+    </div>
+  );
+}

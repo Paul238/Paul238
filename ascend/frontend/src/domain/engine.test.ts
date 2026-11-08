@@ -6,6 +6,7 @@ import {
   calendarDay,
   createEmptyState,
   currentStreak,
+  goalDeadlinePlan,
   goalProgress,
   goalRequiredCredits,
   reducer,
@@ -357,5 +358,21 @@ describe('zile în plus', () => {
     s = reducer(s, complete('sala', at(1)));
     expect(availableCredits(s)).toBe(20);
     expect(tasksForDay(s, '2026-11-03')[0].status).toBe('done');
+  });
+});
+
+describe('termen la obiective', () => {
+  it('calculează creditele pe zi necesare și dacă ritmul ajunge', () => {
+    let s = setup([task('a', { points: 50 })]);
+    s = run(
+      s,
+      { type: 'goal/create', goal: { id: 'g', title: 'Telefon', mode: 'development', price: 1050, createdAt: at(0), deadline: '2026-11-22' } },
+      complete('a', at(0)),
+    );
+    const p = goalDeadlinePlan(s, s.goals[0], '2026-11-02')!;
+    expect(p.daysLeft).toBe(20);
+    expect(p.perDay).toBe(50);
+    expect(p.status).toBe('onTrack');
+    expect(goalDeadlinePlan(s, s.goals[0], '2026-11-25')!.status).toBe('overdue');
   });
 });

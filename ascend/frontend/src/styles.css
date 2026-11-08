@@ -567,7 +567,7 @@ button.hero-chip:hover { transform: translateY(-2px); background: rgba(12, 12, 3
 @keyframes breathe2 { 50% { transform: scale(1.15); opacity: .7; } }
 .cst-node.sel .cst-label { fill: var(--text); }
 
-/* ---------- Vârfuri (obiective) ---------- */
+/* ---------- Obiective ---------- */
 .summit-card { cursor: pointer; transition: transform .25s; }
 .summit-card:hover { transform: translateY(-2px); }
 .summit { width: 100%; height: auto; display: block; margin: 10px 0 12px; color: var(--text); }
@@ -1423,3 +1423,55 @@ button.hud-pill:hover { background: rgba(10, 12, 30, .65); }
   .orbit-node-label { font-size: 11px; }
   .stat-pill { height: 36px; padding: 0 10px; }
 }
+
+
+/* ================================================================== */
+/* Stil „office”: sobru, sans-serif, accent albastru                   */
+/* ================================================================== */
+:root {
+  --font-display: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --accent: #5b7cfa; --accent-2: #7d97ff; --accent-soft: rgba(91, 124, 250, 0.14);
+  --sunrise: linear-gradient(135deg, #4f6ef7, #6d88ff);
+  --bg-glow: radial-gradient(1000px 500px at 100% -10%, rgba(91, 124, 250, 0.08), transparent 60%);
+}
+:root[data-theme='light'] { --accent: #2f5bea; --accent-2: #2448c4; --accent-soft: rgba(47, 91, 234, 0.09); --bg-glow: none; }
+@media (prefers-color-scheme: light) { :root:not([data-theme='dark']) { --accent: #2f5bea; --accent-2: #2448c4; --accent-soft: rgba(47, 91, 234, 0.09); --bg-glow: none; } }
+h1, .display { font-weight: 700; letter-spacing: -0.025em; }
+.btn-primary { box-shadow: 0 1px 2px rgba(0,0,0,.15); text-shadow: none; }
+.btn-primary:hover:not(:disabled) { box-shadow: 0 2px 8px rgba(47, 91, 234, .3); }
+.brand { font-weight: 700; font-size: 18px; }
+.brand-mark { box-shadow: none; }
+.nav-item.active::before { background: var(--accent); }
+.home-hello em, .hud-title em { font-style: normal; color: inherit; background: none; -webkit-background-clip: initial; background-clip: initial; }
+.goal-price, .stat-value, .attr-level, .sheet-credits, .recap-big, .tpts, .planday-pts, .trail-reward b { font-family: Inter, sans-serif; font-weight: 700; letter-spacing: -0.02em; }
+.vault { background: linear-gradient(135deg, #1e2a55, #18203f); }
+:root[data-theme='light'] .vault { background: linear-gradient(135deg, #2f5bea, #2448c4); }
+@media (prefers-color-scheme: light) { :root:not([data-theme='dark']) .vault { background: linear-gradient(135deg, #2f5bea, #2448c4); } }
+
+/* avatar */
+.pavatar { position: relative; flex-shrink: 0; }
+.pavatar svg { position: absolute; inset: 0; }
+.pavatar-face { position: absolute; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; letter-spacing: -0.02em; box-shadow: inset 0 -6px 16px rgba(0,0,0,.15); }
+.pavatar-level { position: absolute; right: 2px; bottom: 2px; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 99px; display: grid; place-items: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 13px; border: 3px solid var(--bg); }
+.orbit-xp-text { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.orbit-name { font-family: Inter, sans-serif; font-weight: 700; margin-top: 8px; }
+.settings-hero svg { width: auto; height: auto; }
+.onb-avatar-card { display: flex; align-items: center; gap: 18px; padding: 18px; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); }
+.onb-avatar-name { display: block; font-size: 22px; font-weight: 700; }
+
+/* termen obiectiv */
+.deadline { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); }
+.deadline svg { color: var(--accent-2); flex-shrink: 0; }
+.deadline b { display: block; font-size: 13px; }
+.deadline small { display: block; font-size: 12px; color: var(--muted); }
+.deadline-behind, .deadline-overdue { border-color: color-mix(in srgb, var(--warning) 45%, transparent); background: var(--warning-soft); }
+.deadline-behind svg, .deadline-overdue svg { color: var(--warning); }
+
+/* autentificare fără peisaj */
+.auth-side { background: linear-gradient(160deg, #1d2a5c, #121a3a 70%) !important; }
+:root[data-theme='light'] .auth-side { background: linear-gradient(160deg, #2f5bea, #1d3fb0) !important; }
+@media (prefers-color-scheme: light) { :root:not([data-theme='dark']) .auth-side { background: linear-gradient(160deg, #2f5bea, #1d3fb0) !important; } }
+.auth-side-inner { background: none !important; }
+.auth-side-inner h1 { font-size: 40px; font-weight: 700; }
+:root[data-theme='light'] { --bg: #f4f6f9; --surface: #ffffff; --surface-2: #f7f8fb; --surface-3: #eceff4; --border: #e3e7ee; --border-strong: #d3d9e3; --text: #141a26; --text-2: #3c4558; --muted: #6b7489; --glass: rgba(255,255,255,.8); }
+@media (prefers-color-scheme: light) { :root:not([data-theme='dark']) { --bg: #f4f6f9; --surface: #ffffff; --surface-2: #f7f8fb; --surface-3: #eceff4; --border: #e3e7ee; --border-strong: #d3d9e3; --text: #141a26; --text-2: #3c4558; --muted: #6b7489; --glass: rgba(255,255,255,.8); } }
