@@ -317,3 +317,27 @@ describe('obiective cu portofel comun', () => {
     expect(availableCredits(s)).toBe(30);
   });
 });
+
+describe('preț real la achiziție', () => {
+  const base = (): AppState =>
+    run(
+      setup([task('a', { points: 100 })]),
+      { type: 'goal/create', goal: { id: 'g', title: 'Office', mode: 'development', price: 80, createdAt: at(0) } },
+      complete('a', at(0)),
+    );
+
+  it('se scad doar creditele pentru prețul plătit', () => {
+    const s = reducer(base(), { type: 'goal/purchase', id: 'g', now: at(0, 12), entryId: 'p', grantId: 'x', price: 30 });
+    expect(s.goals[0]).toMatchObject({ status: 'purchased', paidPrice: 30, paidCredits: 30 });
+    expect(availableCredits(s)).toBe(70);
+  });
+
+  it('corectarea ulterioară returnează sau scade diferența', () => {
+    let s = reducer(base(), { type: 'goal/purchase', id: 'g', now: at(0, 12), entryId: 'p', grantId: 'x' });
+    expect(availableCredits(s)).toBe(20);
+    s = reducer(s, { type: 'goal/reprice', id: 'g', price: 30, now: at(0, 13), entryId: 'r' });
+    expect(availableCredits(s)).toBe(70);
+    s = reducer(s, { type: 'goal/reprice', id: 'g', price: 500, now: at(0, 14), entryId: 'r2' });
+    expect(s.goals[0].paidPrice).toBe(30); // nu sunt destule credite
+  });
+});

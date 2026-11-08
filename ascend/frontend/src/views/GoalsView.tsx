@@ -86,6 +86,8 @@ export function GoalsView() {
           )}
         </div>
       ) : tab === 'history' ? (
+        <>
+        <HistorySummary />
         <div className="card card-flush">
           {goals
             .sort((a, b) => ((a.closedAt ?? '') < (b.closedAt ?? '') ? 1 : -1))
@@ -93,6 +95,7 @@ export function GoalsView() {
               <HistoryRow key={g.id} goal={g} />
             ))}
         </div>
+        </>
       ) : (
         <div className="grid grid-2">
           {goals.map((g) => (
@@ -268,8 +271,13 @@ export function GoalCard({ goal, pace, onEdit }: { goal: Goal; pace: number; onE
   );
 }
 
-function PurchaseModal({ goal, required, onClose }: { goal: Goal; required: number; onClose: () => void }) {
-  const { api, notify } = useApp();
+function PurchaseModal({ goal, onClose }: { goal: Goal; required: number; onClose: () => void }) {
+  const { api, notify, state, derived } = useApp();
+  const [priceText, setPriceText] = useState(String(goal.price));
+  const price = Number(priceText) > 0 ? Number(priceText) : goal.price;
+  const required = goalRequiredCredits({ ...goal, price }, state.settings);
+  const fromWallet = Math.max(0, required - goal.saved);
+  const enough = fromWallet <= derived.available;
   const cost = useWorkCost(required);
   const [ack, setAck] = useState(false);
   return (
@@ -283,9 +291,9 @@ function PurchaseModal({ goal, required, onClose }: { goal: Goal; required: numb
           </button>
           <button
             className="btn btn-gold"
-            disabled={!ack}
+            disabled={!ack || !enough}
             onClick={() => {
-              api.purchase(goal.id);
+              api.purchase(goal.id, price);
               notify({ kind: 'achievement', title: `Obiectiv atins: ${goal.title}`, body: 'Bucură-te de el. Ai muncit pentru asta.' });
               onClose();
             }}
@@ -298,12 +306,26 @@ function PurchaseModal({ goal, required, onClose }: { goal: Goal; required: numb
       <div className="col" style={{ gap: 4 }}>
         <span className="muted small">Obiectiv</span>
         <h2 style={{ fontSize: 18 }}>{goal.title}</h2>
-        <span className="goal-price">{lei(goal.price)}</span>
+      </div>
+      <div className="field">
+        <label>Cât ai plătit de fapt?</label>
+        <div className="row wrap">
+          <div className="input-suffix" style={{ width: 160 }}>
+            <input className="input num" type="number" min={1} value={priceText} onChange={(e) => setPriceText(e.target.value)} />
+            <span>lei</span>
+          </div>
+          {price !== goal.price && (
+            <span className={`badge ${price < goal.price ? 'badge-success' : 'badge-warning'}`}>
+              {price < goal.price ? `economisești ${lei(goal.price - price)}` : `cu ${lei(price - goal.price)} peste estimare`}
+            </span>
+          )}
+        </div>
+        <span className="hint">Estimat: {lei(goal.price)}. Dacă ai găsit o ofertă, scrie prețul real — se scad doar creditele pentru el.</span>
       </div>
       <div className="goal-facts">
         <div>
           <div className="k">Se scad din portofel</div>
-          <div className="v">−{fmt(Math.max(0, required - goal.saved))} cr</div>
+          <div className="v" style={{ color: enough ? undefined : 'var(--danger)' }}>−{fmt(fromWallet)} cr</div>
         </div>
         <div>
           <div className="k">Zile de muncă</div>
@@ -331,22 +353,69 @@ function PurchaseModal({ goal, required, onClose }: { goal: Goal; required: numb
 }
 
 function HistoryRow({ goal }: { goal: Goal }) {
-  const { api, state } = useApp();
+  const { api, state, derived, notify } = useApp();
   const purchased = goal.status === 'purchased';
+  const [editing, setEditing] = useState(false);
+  const paid = goal.paidPrice ?? goal.price;
+  const [val, setVal] = useState(String(paid));
+  const credits = goal.paidCredits ?? goalRequiredCredits(goal, state.settings);
+  const saving = goal.price - paid;
+
+  function savePrice() {
+    const p = Number(val);
+    if (!(p > 0) || p === paid) return setEditing(false);
+    const diff = goalRequiredCredits({ ...goal, price: p }, state.settings) - credits;
+    if (diff > derived.available) {
+      notify({ kind: 'error', title: 'Nu ai destule credite', body: `Diferența de ${fmt(diff)} cr depășește portofelul.` });
+      return;
+    }
+    api.repricePurchase(goal.id, p);
+    notify({ kind: 'success', title: 'Preț actualizat', body: diff < 0 ? `+${fmt(-diff)} credite înapoi în portofel.` : diff > 0 ? `−${fmt(diff)} credite din portofel.` : undefined });
+    setEditing(false);
+  }
+
   return (
-    <div className="list-item">
+    <div className="list-item history-item">
       <span className="muted">{MODES[goal.mode].icon}</span>
       <div className="grow">
         <div className="strong">{goal.title}</div>
         <div className="muted small">
-          {purchased ? `Achiziționat ${fmtDate(goal.purchasedAt!)}` : `Renunțat ${goal.closedAt ? fmtDate(goal.closedAt) : ''}`} · {lei(goal.price)}
-          {purchased && ` · ${fmt(goalRequiredCredits(goal, state.settings))} credite`}
+          {purchased ? `Cumpărat ${fmtDate(goal.purchasedAt!)}` : `Renunțat ${goal.closedAt ? fmtDate(goal.closedAt) : ''}`}
+          {purchased ? (
+            <>
+              {' · '}
+              <b className="text-2">{lei(paid)}</b> · {fmt(credits)} credite
+              {saving > 0 && <span style={{ color: 'var(--success)' }}> · economisit {lei(saving)}</span>}
+              {saving < 0 && <span> · estimat {lei(goal.price)}</span>}
+            </>
+          ) : (
+            ` · ${lei(goal.price)}`
+          )}
         </div>
+        {purchased && editing && (
+          <div className="row wrap mt-8">
+            <div className="input-suffix" style={{ width: 140 }}>
+              <input className="input num" type="number" min={1} value={val} onChange={(e) => setVal(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && savePrice()} />
+              <span>lei</span>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={savePrice}>
+              Salvează
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => (setEditing(false), setVal(String(paid)))}>
+              Renunță
+            </button>
+            <span className="hint">Diferența de credite se returnează sau se scade automat.</span>
+          </div>
+        )}
       </div>
       {purchased ? (
-        <div className="col" style={{ alignItems: 'flex-end', gap: 0 }}>
-          <span className="tiny muted">Cât de mulțumit ești?</span>
-          <div className="stars">
+        <div className="col" style={{ alignItems: 'flex-end', gap: 2 }}>
+          {!editing && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>
+              <Pencil size={13} /> Preț real
+            </button>
+          )}
+          <div className="stars" title="Cât de mulțumit ești?">
             {[1, 2, 3, 4, 5].map((n) => (
               <button key={n} className={(goal.rating ?? 0) >= n ? 'on' : ''} onClick={() => api.rateGoal(goal.id, n)} aria-label={`${n} stele`}>
                 <Star size={16} fill="currentColor" />
@@ -357,6 +426,36 @@ function HistoryRow({ goal }: { goal: Goal }) {
       ) : (
         <span className="badge">Renunțat</span>
       )}
+    </div>
+  );
+}
+
+/** sumarul istoricului de achiziții */
+function HistorySummary() {
+  const { state } = useApp();
+  const bought = state.goals.filter((g) => g.status === 'purchased');
+  if (bought.length === 0) return null;
+  const spent = bought.reduce((s, g) => s + (g.paidPrice ?? g.price), 0);
+  const saved = bought.reduce((s, g) => s + Math.max(0, g.price - (g.paidPrice ?? g.price)), 0);
+  const dropped = state.goals.filter((g) => g.status === 'abandoned');
+  return (
+    <div className="history-summary">
+      <div>
+        <b className="display num">{bought.length}</b>
+        <small>achiziții</small>
+      </div>
+      <div>
+        <b className="display num">{lei(spent)}</b>
+        <small>cheltuit din munca ta</small>
+      </div>
+      <div>
+        <b className="display num" style={{ color: 'var(--success)' }}>{lei(saved)}</b>
+        <small>economisit prin oferte</small>
+      </div>
+      <div>
+        <b className="display num">{dropped.length}</b>
+        <small>impulsuri evitate</small>
+      </div>
     </div>
   );
 }

@@ -156,6 +156,9 @@ export interface Goal {
   activatesAt: ISODate;
   purchasedAt?: ISODate;
   closedAt?: ISODate;
+  /** prețul real plătit (lei) și creditele scăzute la achiziție */
+  paidPrice?: number;
+  paidCredits?: number;
   /** 1-5: cât de mulțumit ești de achiziție */
   rating?: number;
 }

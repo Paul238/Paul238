@@ -415,7 +415,8 @@ export type Action =
   | { type: 'goal/confirm'; id: string; now: string }
   | { type: 'goal/allocate'; id: string; amount: number; now: string; entryId: string }
   | { type: 'goal/release'; id: string; amount: number; now: string; entryId: string }
-  | { type: 'goal/purchase'; id: string; now: string; entryId: string; grantId: string }
+  | { type: 'goal/purchase'; id: string; now: string; entryId: string; grantId: string; price?: number }
+  | { type: 'goal/reprice'; id: string; price: number; now: string; entryId: string }
   | { type: 'goal/abandon'; id: string; now: string; entryId: string }
   | { type: 'goal/rate'; id: string; rating: number }
   | { type: 'goal/delete'; id: string; now: string; entryId: string }
@@ -611,14 +612,16 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'goal/purchase': {
       const goal = state.goals.find((g) => g.id === action.id);
       if (!goal || goal.status !== 'active') return state;
-      const required = goalRequiredCredits(goal, state.settings);
+      // prețul real poate fi diferit de cel estimat (ex. reducere)
+      const paidPrice = action.price && action.price > 0 ? action.price : goal.price;
+      const required = goalRequiredCredits({ ...goal, price: paidPrice }, state.settings);
       // creditele vin întâi din rezervarea obiectivului, restul automat din portofel
       const fromWallet = Math.max(0, required - goal.saved);
       if (fromWallet > availableCredits(state)) return state;
       const surplus = Math.max(0, goal.saved - required);
       let next: AppState = {
         ...state,
-        goals: updateGoal(state, goal.id, (g) => ({ ...g, saved: required, status: 'purchased', purchasedAt: action.now, closedAt: action.now })),
+        goals: updateGoal(state, goal.id, (g) => ({ ...g, saved: required, status: 'purchased', purchasedAt: action.now, closedAt: action.now, paidPrice, paidCredits: required })),
       };
       if (surplus > 0) {
         next = { ...next, ledger: ledger({ id: action.entryId, at: action.now, amount: surplus, kind: 'release', label: `Surplus: ${goal.title}`, ref: goal.id }, next) };
@@ -636,6 +639,24 @@ export function reducer(state: AppState, action: Action): AppState {
         };
       }
       return next;
+    }
+
+    case 'goal/reprice': {
+      // corectarea prețului unei achiziții: diferența se returnează sau se scade din portofel
+      const goal = state.goals.find((g) => g.id === action.id);
+      if (!goal || goal.status !== 'purchased' || !(action.price > 0)) return state;
+      const before = goal.paidCredits ?? goalRequiredCredits(goal, state.settings);
+      const after = goalRequiredCredits({ ...goal, price: action.price }, state.settings);
+      const diff = after - before;
+      if (diff > availableCredits(state)) return state;
+      return {
+        ...state,
+        goals: updateGoal(state, goal.id, (g) => ({ ...g, paidPrice: action.price, paidCredits: after, saved: after })),
+        ledger:
+          diff !== 0
+            ? ledger({ id: action.entryId, at: action.now, amount: -diff, kind: 'adjust', label: `Preț corectat: ${goal.title}`, ref: goal.id }, state)
+            : state.ledger,
+      };
     }
 
     case 'goal/abandon':
